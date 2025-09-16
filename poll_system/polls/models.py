@@ -33,10 +33,11 @@ class Choice(models.Model):
 
 
 class Vote(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='votes')
     choice = models.ForeignKey(Choice, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
     class Meta:
-        unique_together = ('choice', 'user')  # Preventing multiple votes
+        unique_together = ('question', 'user')  # Preventing multiple choices for a user

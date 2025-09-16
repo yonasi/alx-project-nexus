@@ -64,8 +64,12 @@ WSGI_APPLICATION = 'poll_system.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'online_poll_system',
+        'USER': 'postgres',
+        'PASSWORD': 'alx@1146',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
