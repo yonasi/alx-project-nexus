@@ -4,19 +4,43 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
-from .models import Poll, Vote
-from .serializers import PollSerializer, VoteSerializer
-
+from django.contrib.auth.models import User
+from .models import Poll, Question, Choice, Vote
+from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer
+from rest_framework.exceptions import PermissionDenied
 
 
 class PollViewSet(viewsets.ModelViewSet):
+    '''
+    API endpoint for managing polls.
+    - GET /api/v1/polls/: List all polls.
+    - GET /api/vl/polls/{id}/: Retrives poll details.
+    - POST /api/v1/polls/: Create a poll (authenticated).
+    - PUT /aip/v1/polls/{id}: Update a poll (creator only).
+    - DELETE /api/v1/polls/{id}/: Delete a poll (creator only).
+    - POST /api/v1/polls/{id}/: Submit a vote (authenticated).
+    '''
     queryset = Poll.objects.filter(is_active=True)  # Only active polls
     serializer_class = PollSerializer
     permission_class = [IsAuthenticatedOrReadOnly]
 
 
-    @action(detail=True, methods=['get', 'post'], permission_classes=[IsAuthenticated])
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+    
+
+    def perform_update(self, instance):
+        if self.get_object().created_by != self.request.user:
+            raise PermissionDenied('You can only delete your own polls.')
+        instance.delete()
+
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def vote(self, request, pk=None):
+        '''
+        Submit a vote for a poll's question.
+        Request body: {'question': <id>, 'choice': <id>}
+        '''
         poll = self.get_object()
         serializer = VoteSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
@@ -36,3 +60,23 @@ class PollViewSet(viewsets.ModelViewSet):
             except IntegrityError:
                 return Response({"error": "User already voted on this question"}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
+    '''
+    API endpoint for listing questions.
+    - GET /api/v1/questions/: List all questions with  choices.
+    '''
+    queryset = Question.objects.all()
+    serializer_class = QuestionSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+
+class ChoiceViewSet(viewsets.ReadOnlyModelViewSet):
+    '''
+    API endpoints for chices.
+    - GET /api/v1/choices/: List all choices with question IDs.
+    '''
+    queryset = Choice.objects.all()
+    serializer_class = ChoiceSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]

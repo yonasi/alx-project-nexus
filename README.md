@@ -145,4 +145,130 @@ This project is ideal for my skill level because it focuses on CRUD operations, 
 
 ---
 
+
+
+# Online Poll System
+A RESTful API for creating, managing, and voting on polls, built for **Project Nexus** as part of the ALX ProDev BackEnd Engineering program.
+
+---
+
+## Features
+- Create polls with questions and choices.
+- Vote on polls (one vote per question per user).
+- View active polls and results.
+- Secure endpoints with JWT authentication
+- Admin interface for managing polls.
+
+---
+
+## Tech Stack
+- Python 3.13
+- Django 5.x
+- Django REST Framework
+- PostgreSQl
+- djangorestframework-simplejwt
+
+---
+
+## SetUp
+1. **Clone Repository**
+      ```bash
+      git clone 
+      cd alx-project-nexus
+      ```
+2. **SetUp Virtual Enviroment**
+      ```bash
+        python -m venv venv
+        source venv/bin/activate # Windows: venv/scripts/activate
+      ```
+3. **Install dependencis**
+      ```bash
+      pip install -r requirments.txt
+      ```
+4. **Configure PostgrSQL**
+      ```Python
+      DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'your_db_name',
+        'USER': 'your_db_user',
+        'PASSWORD': 'your_db_password',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+      ```
+5. **Apply Migrations**
+      ```bash
+      cd poll_system
+      python manage.py makemigrations
+      python manage.py migrate
+      ```
+6. **Create Superuser**
+      ```bash
+      python manage.py createsuperuser
+      ```
+7. **Run Server**
+      ```bash
+      python manage.py runserver
+      ```
+
+---
+
+## API Endpoints
+All endpoints are prefixed with /api/v1/.
+
+|Method|Endpoint|Discription|Authentication|
+|---|---|---|---|
+|GET|polls/|List active polls|None|
+|GET|/polls/{id}/|Get poll detail|None|
+|POST|/polls/|Create a poll|JWT (Bearer token)|
+|PUT|/polls/{id}/|Update a poll(Creator only)|JWT (Bearer token)|
+|DELETE|/polls/{id}/|Delete a poll (Creator only)|JWT (Bearer token)|
+|POST|polls/{id}/|Submit a vote|JWT (Bearer token)|
+|GET|/questions/|List all questions|None|
+|DET|/choices/|List all choices|None|
+|POST|/token/|Obtain JWT token|Username/Password|
+|POST|/token/refresh|Refresh JWT token|Refresh token|
+
+### Example Request
+- **create Poll**
+      
+    ``` bash
+      curl -X POST http://localhost:8000/api/v1/polls/ \
+      -H "Authorization: Bearer <access_token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+            "title": "Favorite Color?",
+            "is_active": true,
+            "questions": [
+          {
+            "text": "What’s your favorite color?",
+            "choices": [
+                {"text": "Red"},
+                {"text": "Blue"}
+            ]
+          }
+                    ]
+          }'
+    ```
+
+- **Vote**
+
+    ```bash
+      curl -X POST http://localhost:8000/api/v1/polls/1/vote/ \
+      -H "Authorization: Bearer <access_token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+            "question": 1,
+            "choice": 1
+          }'
+    ```
+
+## Admin Interface
+- URL: http://localhost:8000/admin/
+- Features: Manage polls, questions, choices, votes with inlines, filters, and search.
+
+
+
 *This repository will be updated as I progress through my final project, adding code, documentation, and reflections on new learnings. Thank you for visiting alx-project-nexus!*
