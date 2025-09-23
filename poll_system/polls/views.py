@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from .models import Poll, Question, Choice, Vote
 from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer
 from rest_framework.exceptions import PermissionDenied
+from .tasks import process_vote
 
 
 class PollViewSet(viewsets.ModelViewSet):
@@ -48,17 +49,9 @@ class PollViewSet(viewsets.ModelViewSet):
             choice = serializer.validated_data['choice']
             if question.poll != poll:
                 return Response({"error": "Question does not belong to this poll"}, status=status.HTTP_400_BAD_REQUEST)
-            try:
-                Vote.objects.create(
-                    question=question,
-                    choice=choice,
-                    user=request.user
-                )
-                choice.vote_count += 1
-                choice.save()
-                return Response({"message": "Vote recorded"}, status=status.HTTP_201_CREATED)
-            except IntegrityError:
-                return Response({"error": "User already voted on this question"}, status=status.HTTP_400_BAD_REQUEST)
+            # Queue Celery task
+            result = process_vote.delay(question.id, choice.id, request.user.id)
+            return Response({"message": "Vote processing started", 'task_id': result.id}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 

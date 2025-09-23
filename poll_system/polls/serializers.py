@@ -1,11 +1,12 @@
 from rest_framework import serializers
 from .models import Poll, Question, Choice, Vote
+from django.db import IntegrityError
 
 class ChoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Choice
-        fields = ['id', 'text', 'vote_count']
-        read_only_fields = ['vote_count']  # Prevent updating vote_count directly
+        fields = ['id', 'text', 'vote_count', 'question']
+        read_only_fields = ['vote_count', 'question']  # Prevent updating vote_count directly
 
 class QuestionSerializer(serializers.ModelSerializer):
     choices = ChoiceSerializer(many=True, read_only=True)
@@ -40,6 +41,19 @@ class PollSerializer(serializers.ModelSerializer):
             QuestionSerializer().create({**question_data, 'poll': poll})
         return poll
     
+
+    def update(self, validated_data):
+        questions_data = validated_data.pop('questions', None)
+        poll = self.instance
+        for attr, value in validated_data.items():
+            setattr(poll, attr, value)
+        poll.save()
+        if questions_data is not None:
+            poll.questions.all().delete()  # Deleting existing questions
+            for question_data in questions_data:
+                QuestionSerializer().create({**question_data, 'poll':poll})
+            return poll
+        
 
 class VoteSerializer(serializers.ModelSerializer):
     class Meta:

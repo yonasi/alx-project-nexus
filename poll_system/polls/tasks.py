@@ -1,5 +1,5 @@
 from celery import shared_task
-from models import Choice, Vote, Question
+from .models import Choice, Vote, Question
 from django.contrib.auth.models import User
 from django.db import IntegrityError
 
