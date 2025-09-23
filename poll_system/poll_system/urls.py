@@ -26,6 +26,7 @@ schema_view = get_schema_view(
     public=True,
     permission_classes=[IsAuthenticatedOrReadOnly],
     authentication_classes=[rest_framework_simplejwt.authentication.JWTAuthentication],
+    #security=[{'Bearer': []}]
 
 
     #  security_definitions={

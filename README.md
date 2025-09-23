@@ -212,7 +212,16 @@ A RESTful API for creating, managing, and voting on polls, built for **Project N
       ```bash
       python manage.py runserver
       ```
-
+8. **Install Redis**
+      ```bash
+      # Windows: Download from https://github.com/microsoftarchive/redis/releases/
+      # WSL/Ubuntu: sudo apt-get install redis-server
+       redis-server
+     ```
+9. **Run Celery**
+     ```bash
+     cd poll_system
+     celery -A poll_system worker --loglevel=info --pool=solo #windows
 ---
 
 ## API Endpoints
@@ -230,6 +239,7 @@ All endpoints are prefixed with /api/v1/.
 |DET|/choices/|List all choices|None|
 |POST|/token/|Obtain JWT token|Username/Password|
 |POST|/token/refresh|Refresh JWT token|Refresh token|
+|PATCH|/polls/{id}/|Partially update a poll|JWT (Bearer token)
 
 ### Example Request
 - **create Poll**
