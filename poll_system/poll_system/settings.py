@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'graphene_django',
     'rest_framework_simplejwt',
     'drf_yasg',
     'polls',
@@ -145,6 +146,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 
 # Swagger settings
 
+SWAGGER_USE_COMPAT_RENDERERS = False  # uncomment during pytest 
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
         'Bearer': {

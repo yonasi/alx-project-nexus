@@ -4,6 +4,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.views import APIView
 from django.contrib.auth.models import User
 from .models import Poll, Question, Choice, Vote
 from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer
@@ -61,6 +62,18 @@ class PollViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
+class PollDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, poll_id):
+        try:
+            poll = Poll.objects.get(id=poll_id, is_active=True)
+            serializer = PollSerializer(poll)
+            return Response(serializer.data)
+        except Poll.DoesNotExist:
+            return Response({'error': 'Poll not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
     '''
     API endpoint for listing questions.
@@ -79,3 +92,4 @@ class ChoiceViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Choice.objects.all()
     serializer_class = ChoiceSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+

@@ -7,6 +7,8 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from polls.views import PollViewSet, QuestionViewSet, ChoiceViewSet
+from graphene_django.views import GraphQLView
+from polls.schema import schema
 
 
 schema_view = get_schema_view(
@@ -52,4 +54,5 @@ urlpatterns = [
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    path('graphql/', GraphQLView.as_view(graphiql=True)),
 ]
