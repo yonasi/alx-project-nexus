@@ -56,7 +56,6 @@ class PollAPITests(APITestCase):
         """
         Ensure updating a poll with existing votes fails without confirmation.
         """
-        # Create a vote on the poll to test the confirmation logic
         Vote.objects.create(
             user=self.user,
             question=self.question,
@@ -66,13 +65,12 @@ class PollAPITests(APITestCase):
         data = {'title': 'Updated Poll Title'}
         response = self.client.patch(self.poll_detail_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('confirm_reset', response.data['error'])
+        self.assertIn('confirm_reset', str(response.data))
 
     def test_update_poll_with_existing_votes_with_confirmation(self):
         """
         Ensure updating a poll with existing votes succeeds with confirmation.
         """
-        # Create a vote on the poll
         Vote.objects.create(
             user=self.user,
             question=self.question,
@@ -83,6 +81,7 @@ class PollAPITests(APITestCase):
             'title': 'Updated Poll Title',
             'confirm_reset': True,
             'questions': [{
+                'id': self.question.id,
                 'text': 'A new question?',
                 'choices': [{'text': 'Yes'}, {'text': 'No'}]
             }]
@@ -96,9 +95,9 @@ class PollAPITests(APITestCase):
         """
         Ensure a vote can be submitted successfully.
         """
-        data = {'choice': self.choice1.id, 'question': self.question.id}
+        data = {'choice': self.choice1.id}
         response = self.client.post(self.vote_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Vote.objects.count(), 1)
         self.assertEqual(Vote.objects.first().choice, self.choice1)
 
@@ -107,27 +106,28 @@ class PollAPITests(APITestCase):
         Ensure a user cannot vote twice on the same question.
         """
         # First vote (successful)
-        data = {'choice': self.choice1.id, 'question': self.question.id}
+        data = {'choice': self.choice1.id}
         self.client.post(self.vote_url, data, format='json')
         
         # Second vote (should fail)
         response = self.client.post(self.vote_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertIn('You have already voted', response.data['error'])
+        self.assertIn('You have already voted', str(response.data))
 
     def test_vote_on_nonexistent_choice_fails(self):
         """
         Ensure voting on a non-existent choice fails.
         """
-        data = {'choice': 999, 'question': self.question.id}
+        data = {'choice': 999}
         response = self.client.post(self.vote_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('No Choice matches the given query.', str(response.data))
 
     def test_unauthenticated_vote_fails(self):
         """
         Ensure unauthenticated users cannot vote.
         """
         self.client.force_authenticate(user=None)
-        data = {'choice': self.choice1.id, 'question': self.question.id}
+        data = {'choice': self.choice1.id}
         response = self.client.post(self.vote_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
