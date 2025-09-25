@@ -30,8 +30,14 @@ class PollViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
     
 
-    def perform_update(self, instance):
+    def perform_update(self, serializer):
         if self.get_object().created_by != self.request.user:
+            raise PermissionDenied('You can only update your own polls.')
+        serializer.save(partial=True) # To support PATCH
+    
+
+    def perform_destroy(self, instance):
+        if instance.created_by != self.request.user:
             raise PermissionDenied('You can only delete your own polls.')
         instance.delete()
 

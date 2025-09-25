@@ -18,15 +18,16 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
     def create(self, validated_data):
-        choices_data = validated_data.pop('choices')
-        question = Question.objects.create(**validated_data)
+        choices_data = validated_data.pop('choices', [])
+        Poll = validated_data.pop('poll')
+        question = Question.objects.create(poll=Poll, **validated_data)
         for choice_data in choices_data:
             Choice.objects.create(question = question, **choices_data)
         return question
     
 
 class PollSerializer(serializers.ModelSerializer):
-    questions = QuestionSerializer(many=True, read_only=True)
+    questions = QuestionSerializer(many=True, read_only=True, required=False)
 
     class Meta:
         model = Poll
@@ -35,24 +36,27 @@ class PollSerializer(serializers.ModelSerializer):
 
     
     def create(self, validated_data):
-        questions_data = validated_data.pop('questions')
+        questions_data = validated_data.pop('questions', [])
+        validated_data.pop('created_by', None) #since it is read only and to avoid error from duplicate created_by field 
         poll = Poll.objects.create(created_by=self.context['request'].user, **validated_data)
         for question_data in questions_data:
-            QuestionSerializer().create({**question_data, 'poll': poll})
+            question_data['poll'] = poll
+            QuestionSerializer().create(question_data)
         return poll
     
 
-    def update(self, validated_data):
+    def update(self, instance, validated_data):
         questions_data = validated_data.pop('questions', None)
-        poll = self.instance
         for attr, value in validated_data.items():
-            setattr(poll, attr, value)
-        poll.save()
+            setattr(instance, attr, value)
+        instance.save()
+        # if questions provided
         if questions_data is not None:
-            poll.questions.all().delete()  # Deleting existing questions
+            instance.questions.all().delete()  # Deleting existing questions
             for question_data in questions_data:
-                QuestionSerializer().create({**question_data, 'poll':poll})
-            return poll
+                question_data['poll'] = instance # sets poll instance
+                QuestionSerializer().create(question_data)
+        return self.__class__(instance, context=self.context).data
         
 
 class VoteSerializer(serializers.ModelSerializer):
