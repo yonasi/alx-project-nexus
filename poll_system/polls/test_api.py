@@ -17,6 +17,7 @@ class PollAPITestCase(TestCase):
         self.question = Question.objects.create(poll=self.poll, text='Test Question')
         self.choice = Choice.objects.create(question=self.question, text='Option 1')
 
+    
     def test_list_polls(self):
         response = self.client.get('/api/v1/polls/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -42,6 +43,7 @@ class PollAPITestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Choice.objects.get(id=self.choice.id).vote_count, 1)
         self.assertEqual(Vote.objects.count(), 1)
+        self.assertEqual(Vote.objects.first().user, self.user)
 
     def test_vote_unauthorized(self):
         self.client.credentials()  # Remove token
