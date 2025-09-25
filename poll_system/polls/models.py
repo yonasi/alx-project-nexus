@@ -1,49 +1,55 @@
 from django.db import models
+from django.contrib.auth.models import User
 from django.utils import timezone
 
 class Poll(models.Model):
     """
-    Model for a Poll. A poll can have multiple questions.
+    Model for a Poll, including ownership, activity status, and timestamps.
     """
-    poll_title = models.CharField(max_length=200)
+    title = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
-    pub_date = models.DateTimeField('date published', default=timezone.now)
-    end_date = models.DateTimeField('date ended', null=True, blank=True)
-
-    # for tracking data changes.
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    end_date = models.DateTimeField('date ended', null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        return self.poll_title
+        return self.title
+
 
 class Question(models.Model):
     """
-    Model for a Question within a Poll. A question must belong to a poll.
+    A question belonging to a poll.
     """
-    # Using related_name for reverse relation from Poll to its Questions.
     poll = models.ForeignKey(Poll, on_delete=models.CASCADE, related_name='questions')
-    question_text = models.CharField(max_length=200)
-
-    # for tracking data changes.
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    text = models.CharField(max_length=600)
 
     def __str__(self):
-        return self.question_text
+        return self.text
+
 
 class Choice(models.Model):
     """
-    Model for a Choice within a Question. A choice must belong to a question.
+    A choice for a question.
     """
-    # Using related_name for reverse relation from Question to its Choices.
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='choices')
-    choice_text = models.CharField(max_length=200)
-    votes = models.IntegerField(default=0)
+    text = models.CharField(max_length=300)
 
-    # for tracking data changes.
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
+    
     def __str__(self):
-        return self.choice_text
+        return self.text
+
+
+class Vote(models.Model):
+    """
+    Tracks a single vote by a user for a choice on a question.
+    The unique_together constraint ensures a user can only vote once per question.
+    """
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    choice = models.ForeignKey(Choice, on_delete=models.CASCADE, related_name='votes')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('question', 'user')

@@ -28,8 +28,16 @@ class QuestionAdmin(admin.ModelAdmin):
 
 @admin.register(Choice)
 class ChoiceAdmin(admin.ModelAdmin):
-    list_display = ('text', 'question', 'vote_count')
+    list_display = ('text', 'question', 'get_vote_count')
     list_filter = ('question',)
+    
+    def get_vote_count(self, obj):
+        """
+        Calculates the number of votes for a choice by counting related Vote objects.
+        """
+        return obj.votes.count()
+    
+    get_vote_count.short_description = "Vote Count" # Sets a custom column header
 
 @admin.register(Vote)
 class VoteAdmin(admin.ModelAdmin):
