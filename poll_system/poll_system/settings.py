@@ -68,7 +68,7 @@ WSGI_APPLICATION = 'poll_system.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'online_poll_system',
+        'NAME': 'nexus_poll_system',
         'USER': 'postgres',
         'PASSWORD': 'alx@1146',
         'HOST': 'localhost',
