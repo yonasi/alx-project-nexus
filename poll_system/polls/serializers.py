@@ -36,7 +36,7 @@ class PollSerializer(serializers.ModelSerializer):
 
     
     def create(self, validated_data):
-        questions_data = validated_data.pop('questions', [])
+        questions_data = validated_data.pop('questions')
         validated_data.pop('created_by', None) #since it is read only and to avoid error from duplicate created_by field 
         poll = Poll.objects.create(created_by=self.context['request'].user, **validated_data)
         for question_data in questions_data:

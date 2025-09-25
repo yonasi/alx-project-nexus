@@ -42,6 +42,9 @@ class PollAPITestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Choice.objects.get(id=self.choice.id).vote_count, 1)
         self.assertEqual(Vote.objects.count(), 1)
+        self.assertEqual(Vote.objects.first().user, self.user)
+        self.assertEqual(Vote.objects.first().question, self.question)
+        
 
     def test_vote_unauthorized(self):
         self.client.credentials()  # Remove token

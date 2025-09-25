@@ -93,3 +93,23 @@ class ChoiceViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ChoiceSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
+
+class VoteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, poll_id):
+        choice_id = request.data.get('choice_id')
+        try:
+            # Validate choice belongs to poll
+            choice = Choice.objects.get(id=choice_id, question__poll_id=poll_id)
+            question = choice.question
+            # Trigger Celery task
+            result = process_vote.delay(question.id, choice_id, request.user.id)
+            # Wait for result (for tests; remove in production for async)
+            result = result.get(timeout=5)
+            if 'error' in result:
+                return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'Vote recorded'}, status=status.HTTP_201_CREATED)
+        except Choice.DoesNotExist:
+            return Response({'error': 'Invalid choice'}, status=status.HTTP_400_BAD_REQUEST)
+        
