@@ -3,26 +3,22 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
-from rest_framework.views import APIView
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404
 from .models import Poll, Question, Choice, Vote
 from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer
-from .tasks import process_vote
 
 
 class PollViewSet(viewsets.ModelViewSet):
     '''
     API endpoint for managing polls.
-    API endpoint for managing polls.
     - GET /api/v1/polls/: List all polls.
-    - GET /api/vl/polls/{id}/: Retrives poll details.
+    - GET /api/v1/polls/{id}/: Retrieves poll details.
     - POST /api/v1/polls/: Create a poll (authenticated).
-    - PUT /aip/v1/polls/{id}: Update a poll (creator only).
+    - PUT/PATCH /api/v1/polls/{id}: Update a poll (creator only).
     - DELETE /api/v1/polls/{id}/: Delete a poll (creator only).
-    - POST /api/v1/polls/{id}/: Submit a vote (authenticated).
     '''
-    queryset = Poll.objects.filter(is_active=True) #lists only active polls
+    queryset = Poll.objects.filter(is_active=True)
     serializer_class = PollSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -38,7 +34,7 @@ class PollViewSet(viewsets.ModelViewSet):
         """
         if self.get_object().created_by != self.request.user:
             raise PermissionDenied('You can only update your own polls.')
-        serializer.save(partial=True)
+        serializer.save()
 
     def perform_destroy(self, instance):
         """
@@ -52,41 +48,38 @@ class PollViewSet(viewsets.ModelViewSet):
     def vote(self, request, pk=None):
         '''
         Submit a vote for a poll's question.
-        Request body: {'question': <id>, 'choice': <id>}
+        Request body: {'choice': <id>}
         '''
-        poll = self.get_object()
-        serializer = VoteSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            question = serializer.validated_data['question']
-            choice = serializer.validated_data['choice']
-            if question.poll != poll:
-                return Response({"error": "Question does not belong to this poll"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Queue Celery task
-            result = process_vote.delay(question.id, choice.id, request.user.id)
-            
-            # The API immediately responds while the task runs in the background.
-            return Response({"message": "Vote processing started", 'task_id': result.id}, status=status.HTTP_202_ACCEPTED)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class PollDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, poll_id):
+        poll = get_object_or_404(Poll, pk=pk)
+        
         try:
-            poll = Poll.objects.get(id=poll_id, is_active=True)
-            serializer = PollSerializer(poll)
-            return Response(serializer.data)
-        except Poll.DoesNotExist:
-            return Response({'error': 'Poll not found'}, status=status.HTTP_404_NOT_FOUND)
+            choice_id = request.data.get('choice')
+            if not choice_id:
+                raise ValidationError({"error": "The 'choice' field is required."})
+
+            choice = get_object_or_404(Choice, id=choice_id)
+
+            if choice.question.poll != poll:
+                raise ValidationError({"error": "Choice does not belong to this poll."})
+
+            # Check if the user has already voted on the question
+            if Vote.objects.filter(user=request.user, question=choice.question).exists():
+                return Response({"error": "You have already voted on this question."}, status=status.HTTP_409_CONFLICT)
+            
+            # Create the vote
+            Vote.objects.create(user=request.user, question=choice.question, choice=choice)
+            
+            return Response({"message": "Vote recorded successfully."}, status=status.HTTP_201_CREATED)
+
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
     '''
     API endpoint for listing questions.
-    - GET /api/v1/questions/: List all questions with  choices.
     '''
     queryset = Question.objects.all()
     serializer_class = QuestionSerializer
@@ -96,7 +89,6 @@ class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
 class ChoiceViewSet(viewsets.ReadOnlyModelViewSet):
     '''
     API endpoints for choices.
-    - GET /api/v1/choices/: List all choices with question IDs.
     '''
     queryset = Choice.objects.all()
     serializer_class = ChoiceSerializer
