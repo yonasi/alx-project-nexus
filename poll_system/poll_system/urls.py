@@ -11,6 +11,32 @@ from polls.views import PollViewSet, QuestionViewSet, ChoiceViewSet, RegisterVie
 from graphene_django.views import GraphQLView
 from polls.schema import schema
 
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['username', 'password'],
+            properties={
+                'username': openapi.Schema(type=openapi.TYPE_STRING, description='User username'),
+                'password': openapi.Schema(type=openapi.TYPE_STRING, format='password', description='User password')
+            },
+        ),
+        responses={
+            200: openapi.Response('Token created', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'access': openapi.Schema(type=openapi.TYPE_STRING, description='JWT access token'),
+                    'refresh': openapi.Schema(type=openapi.TYPE_STRING, description='JWT refresh token')
+                }
+            )),
+            401: 'Unauthorized'
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
 schema_view = get_schema_view(
     openapi.Info(
         title='Online Poll System API',
@@ -40,7 +66,7 @@ urlpatterns = [
     path('api/v1/', include(router.urls)),
     path('api/v1/register/', RegisterView.as_view(), name='register'),
     path('api/v1/change-password/', ChangePasswordView.as_view(), name='change_password'),
-    path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/v1/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),

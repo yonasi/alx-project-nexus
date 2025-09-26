@@ -12,11 +12,35 @@ from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, V
 from rest_framework.exceptions import PermissionDenied
 from .tasks import process_vote
 import logging
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 logger = logging.getLogger(__name__)
 
 
 class RegisterView(APIView):
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['username', 'password'],
+            properties={
+                'username': openapi.Schema(type=openapi.TYPE_STRING, description='Unique username'),
+                'email': openapi.Schema(type=openapi.TYPE_STRING, format='email', description='User email (optional)'),
+                'password': openapi.Schema(type=openapi.TYPE_STRING, format='password', description='User password')
+            },
+        ),
+        responses={
+            201: openapi.Response('User created', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'username': openapi.Schema(type=openapi.TYPE_STRING),
+                    'email': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            400: 'Bad Request'
+        }
+    )
     def post(self, request):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
@@ -33,6 +57,24 @@ class RegisterView(APIView):
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['old_password', 'new_password'],
+            properties={
+                'old_password': openapi.Schema(type=openapi.TYPE_STRING, format='password', description='Current password'),
+                'new_password': openapi.Schema(type=openapi.TYPE_STRING, format='password', description='New password')
+            },
+        ),
+        responses={
+            200: openapi.Response('Password changed', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'message': openapi.Schema(type=openapi.TYPE_STRING)}
+            )),
+            400: 'Bad Request'
+        },
+        security=[{'Bearer': []}]
+    )
     def post(self, request):
         user = request.user
         old_password = request.data.get('old_password')
@@ -45,7 +87,6 @@ class ChangePasswordView(APIView):
         user.save()
         logger.info(f"Password changed for user {user.username}")
         return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
-
 
 class PollViewSet(viewsets.ModelViewSet):
     '''
@@ -75,6 +116,26 @@ class PollViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['choice_id'],
+            properties={
+                'choice_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the choice to vote for')
+            },
+        ),
+        responses={
+            202: openapi.Response('Vote queued', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    'task_id': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            400: 'Bad Request'
+        },
+        security=[{'Bearer': []}]
+    )
     def vote(self, request, pk=None):
         '''
         Submit a vote for a poll's choice.
