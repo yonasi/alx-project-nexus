@@ -1,23 +1,22 @@
+from django.shortcuts import render
+from django.db import IntegrityError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.views import APIView
-from .serializers import UserSerializer
-from .models import Poll, Question, Choice
-from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer
+from django.contrib.auth.models import User
+from .models import Poll, Question, Choice, Vote
+from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer, UserSerializer
 from rest_framework.exceptions import PermissionDenied
 from .tasks import process_vote
-import logging
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
-from django.core.cache import cache
 from django.views.decorators.cache import cache_page
+import logging
 
 logger = logging.getLogger(__name__)
-
 
 class RegisterView(APIView):
     @swagger_auto_schema(
@@ -53,8 +52,6 @@ class RegisterView(APIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -89,8 +86,7 @@ class ChangePasswordView(APIView):
         logger.info(f"Password changed for user {user.username}")
         return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
 
-
-@method_decorator(cache_page(60 * 30))  # Cache for 30 minutes
+@method_decorator(cache_page(60 * 5), name='dispatch')  # Cache for 5 minutes
 class PollViewSet(viewsets.ModelViewSet):
     '''
     API endpoint for managing polls.
@@ -100,6 +96,7 @@ class PollViewSet(viewsets.ModelViewSet):
     - PUT /api/v1/polls/{id}/: Update a poll (creator only).
     - DELETE /api/v1/polls/{id}/: Delete a poll (creator only).
     - POST /api/v1/polls/{id}/vote/: Submit a vote (authenticated).
+    - GET /api/v1/polls/{id}/stats/: View poll vote statistics.
     '''
     queryset = Poll.objects.filter(is_active=True)
     serializer_class = PollSerializer
@@ -119,7 +116,6 @@ class PollViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    @ratelimit(key='user', rate='5/m', method='POST', block=True)
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -153,32 +149,50 @@ class PollViewSet(viewsets.ModelViewSet):
         try:
             choice = Choice.objects.get(id=choice_id, question__poll=poll)
             question = choice.question
-            # Queue Celery task
             task = process_vote.delay(question.id, choice_id, request.user.id)
             logger.info(f"Vote task queued for poll {pk}, choice {choice_id}, user {request.user.id}, task {task.id}")
+            from django.core.cache import cache
+            cache.clear()  # Clear cache after vote
             return Response({'message': 'Vote processing started', 'task_id': task.id}, status=status.HTTP_202_ACCEPTED)
         except Choice.DoesNotExist:
             logger.error(f"Invalid choice_id {choice_id} for poll {pk}")
             return Response({'error': 'Invalid choice'}, status=status.HTTP_400_BAD_REQUEST)
-        
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    @ratelimit(key='user', rate='5/m', method='POST', block=True)
-    def vote(self, request, pk=None):
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticatedOrReadOnly])
+    @swagger_auto_schema(
+        responses={
+            200: openapi.Response('Poll statistics', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'total_votes': openapi.Schema(type=openapi.TYPE_INTEGER, description='Total votes in poll'),
+                    'top_choice': openapi.Schema(type=openapi.TYPE_STRING, description='Text of top-voted choice', nullable=True),
+                    'vote_distribution': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        description='Vote count per choice text',
+                        additional_properties=openapi.Schema(type=openapi.TYPE_INTEGER)
+                    )
+                }
+            ))
+        }
+    )
+    def stats(self, request, pk=None):
+        '''
+        Retrieve vote statistics for a poll.
+        Returns total votes, top choice, and vote distribution.
+        '''
         poll = self.get_object()
-        serializer = VoteSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            question = serializer.validated_data['question']
-            choice = serializer.validated_data['choice']
-            if question.poll != poll:
-                return Response({"error": "Question does not belong to this poll"}, status=status.HTTP_400_BAD_REQUEST)
-            # Queue Celery task
-            result = process_vote.delay(question.id, choice.id, request.user.id)
-            #clear cache after voting
-            cache.clear()
-            return Response({"message": "Vote processing started", 'task_id': result.id}, status=status.HTTP_202_ACCEPTED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+        total_votes = Vote.objects.filter(question__poll=poll).count()
+        top_choice = Choice.objects.filter(question__poll=poll).order_by('-vote_count').first()
+        vote_distribution = {
+            choice.text: choice.vote_count
+            for question in poll.questions.all()
+            for choice in question.choices.all()
+        }
+        return Response({
+            'total_votes': total_votes,
+            'top_choice': top_choice.text if top_choice else None,
+            'vote_distribution': vote_distribution
+        })
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
     '''
