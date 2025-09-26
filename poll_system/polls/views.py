@@ -15,6 +15,7 @@ from drf_yasg import openapi
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 import logging
+from django_ratelimit.decorators import ratelimit
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class ChangePasswordView(APIView):
         logger.info(f"Password changed for user {user.username}")
         return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
 
-@method_decorator(cache_page(60 * 5), name='dispatch')  # Cache for 5 minutes
+@method_decorator(cache_page(60 * 30), name='dispatch')  # Cache for 30 minutes
 class PollViewSet(viewsets.ModelViewSet):
     '''
     API endpoint for managing polls.
@@ -116,6 +117,7 @@ class PollViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @ratelimit(key='user', rate='5/m', method='POST', block='True') 
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
