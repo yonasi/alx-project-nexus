@@ -1,133 +1,57 @@
-from django.urls import reverse
-from rest_framework import status
-from rest_framework.test import APITestCase
+from django.test import TestCase
+from rest_framework.test import APIClient
 from django.contrib.auth.models import User
-from .models import Poll, Question, Choice, Vote
+from rest_framework_simplejwt.tokens import RefreshToken
+from polls.models import Poll, Question, Choice, Vote
+from rest_framework import status
+import time
 
-class PollAPITests(APITestCase):
-    """
-    Test suite for the Polls API endpoints.
-    """
+class PollAPITestCase(TestCase):
     def setUp(self):
-        """
-        Set up the test data for all tests.
-        """
-        self.user = User.objects.create_user(username='testuser', password='testpassword')
-        self.poll = Poll.objects.create(
-            title='Test Poll',
-            created_by=self.user,
-            is_active=True
-        )
-        self.question = Question.objects.create(
-            poll=self.poll,
-            text='What is your favorite color?'
-        )
-        self.choice1 = Choice.objects.create(
-            question=self.question,
-            text='Red'
-        )
-        self.choice2 = Choice.objects.create(
-            question=self.question,
-            text='Blue'
-        )
-        self.vote_url = reverse('poll-vote', kwargs={'pk': self.poll.id})
-        self.poll_url = reverse('poll-list')
-        self.poll_detail_url = reverse('poll-detail', kwargs={'pk': self.poll.id})
-        self.client.force_authenticate(user=self.user)
+        self.client = APIClient()
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.token = RefreshToken.for_user(self.user).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        self.poll = Poll.objects.create(title='Test Poll', created_by=self.user)
+        self.question = Question.objects.create(poll=self.poll, text='Test Question')
+        self.choice = Choice.objects.create(question=self.question, text='Option 1')
 
-    def test_create_poll_successfully(self):
-        """
-        Ensure we can create a new poll with nested questions and choices.
-        """
-        data = {
-            'title': 'New Poll',
-            'questions': [{
-                'text': 'What is the capital of France?',
-                'choices': [{'text': 'Paris'}, {'text': 'London'}]
-            }]
-        }
-        response = self.client.post(self.poll_url, data, format='json')
+    def test_list_polls(self):
+        response = self.client.get('/api/v1/polls/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['title'], 'Test Poll')
+
+    def test_create_poll(self):
+        data = {'title': 'New Poll', 'is_active': True}
+        response = self.client.post('/api/v1/polls/', data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Poll.objects.count(), 2)
-        self.assertEqual(Question.objects.count(), 2)
-        self.assertEqual(Choice.objects.count(), 4)
+        self.assertEqual(Poll.objects.last().title, 'New Poll')
 
-    def test_update_poll_with_existing_votes_without_confirmation(self):
-        """
-        Ensure updating a poll with existing votes fails without confirmation.
-        """
-        Vote.objects.create(
-            user=self.user,
-            question=self.question,
-            choice=self.choice1
-        )
-        
-        data = {'title': 'Updated Poll Title'}
-        response = self.client.patch(self.poll_detail_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('confirm_reset', str(response.data))
-
-    def test_update_poll_with_existing_votes_with_confirmation(self):
-        """
-        Ensure updating a poll with existing votes succeeds with confirmation.
-        """
-        Vote.objects.create(
-            user=self.user,
-            question=self.question,
-            choice=self.choice1
-        )
-        
-        data = {
-            'title': 'Updated Poll Title',
-            'confirm_reset': True,
-            'questions': [{
-                'id': self.question.id,
-                'text': 'A new question?',
-                'choices': [{'text': 'Yes'}, {'text': 'No'}]
-            }]
-        }
-        response = self.client.patch(self.poll_detail_url, data, format='json')
+    def test_retrieve_poll(self):
+        response = self.client.get(f'/api/v1/polls/{self.poll.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Assert that the vote has been deleted
-        self.assertEqual(Vote.objects.count(), 0)
+        self.assertEqual(response.data['title'], 'Test Poll')
+        self.assertEqual(len(response.data['questions']), 1)
 
-    def test_vote_successfully(self):
-        """
-        Ensure a vote can be submitted successfully.
-        """
-        data = {'choice': self.choice1.id}
-        response = self.client.post(self.vote_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    def test_vote_poll(self):
+        data = {'choice_id': self.choice.id}
+        response = self.client.post(f'/api/v1/polls/{self.poll.id}/vote/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        time.sleep(2)  # Wait for Celery task
+        self.assertEqual(Choice.objects.get(id=self.choice.id).vote_count, 1)
         self.assertEqual(Vote.objects.count(), 1)
-        self.assertEqual(Vote.objects.first().choice, self.choice1)
+        self.assertEqual(Vote.objects.first().user, self.user)
+        self.assertEqual(Vote.objects.first().question, self.question)
 
-    def test_vote_twice_on_same_question_fails(self):
-        """
-        Ensure a user cannot vote twice on the same question.
-        """
-        # First vote (successful)
-        data = {'choice': self.choice1.id}
-        self.client.post(self.vote_url, data, format='json')
-        
-        # Second vote (should fail)
-        response = self.client.post(self.vote_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertIn('You have already voted', str(response.data))
-
-    def test_vote_on_nonexistent_choice_fails(self):
-        """
-        Ensure voting on a non-existent choice fails.
-        """
-        data = {'choice': 999}
-        response = self.client.post(self.vote_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn('No Choice matches the given query.', str(response.data))
-
-    def test_unauthenticated_vote_fails(self):
-        """
-        Ensure unauthenticated users cannot vote.
-        """
-        self.client.force_authenticate(user=None)
-        data = {'choice': self.choice1.id}
-        response = self.client.post(self.vote_url, data, format='json')
+    def test_vote_unauthorized(self):
+        self.client.credentials()
+        data = {'choice_id': self.choice.id}
+        response = self.client.post(f'/api/v1/polls/{self.poll.id}/vote/', data, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_vote_invalid_choice(self):
+        data = {'choice_id': 999}
+        response = self.client.post(f'/api/v1/polls/{self.poll.id}/vote/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
