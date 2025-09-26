@@ -7,7 +7,10 @@ click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.3.0
 colorama==0.4.6
+dj-database-url==3.0.1
 Django==5.2.6
+django-ratelimit==4.1.0
+django-redis==6.0.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 drf-yasg==1.21.10
@@ -28,6 +31,7 @@ PyJWT==2.10.1
 pytest==8.4.2
 pytest-django==4.11.1
 python-dateutil==2.9.0.post0
+python-decouple==3.8
 pytz==2025.2
 PyYAML==6.0.2
 redis==5.2.1
