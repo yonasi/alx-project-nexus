@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 import rest_framework_simplejwt.authentication
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
-from polls.views import PollViewSet, QuestionViewSet, ChoiceViewSet
+from polls.views import PollViewSet, QuestionViewSet, ChoiceViewSet, RegisterView, ChangePasswordView
 from graphene_django.views import GraphQLView
 from polls.schema import schema
 
@@ -38,6 +38,8 @@ urlpatterns = [
     path('', TemplateView.as_view(template_name='index.html'), name='home'),
     path('admin/', admin.site.urls),
     path('api/v1/', include(router.urls)),
+    path('api/v1/register/', RegisterView.as_view(), name='register'),
+    path('api/v1/change-password/', ChangePasswordView.as_view(), name='change_password'),
     path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

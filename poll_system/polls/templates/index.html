@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Poll System</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .poll { margin-bottom: 20px; }
+        button { margin: 5px; }
+        .question { margin-left: 20px; }
+        .choice { margin-left: 40px; }
+        .form-section { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Online Poll System</h1>
+    <div class="form-section">
+        <h2>Register</h2>
+        <input type="text" id="regUsername" placeholder="Username">
+        <input type="email" id="regEmail" placeholder="Email">
+        <input type="password" id="regPassword" placeholder="Password">
+        <button onclick="register()">Register</button>
+    </div>
+    <div class="form-section">
+        <h2>Login</h2>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="login()">Login</button>
+    </div>
+    <div class="form-section">
+        <h2>Change Password</h2>
+        <input type="password" id="oldPassword" placeholder="Old Password">
+        <input type="password" id="newPassword" placeholder="New Password">
+        <button onclick="changePassword()">Change Password</button>
+    </div>
+    <div class="form-section">
+        <h2>Create Poll</h2>
+        <input type="text" id="pollTitle" placeholder="Poll Title">
+        <button onclick="createPoll()">Create Poll</button>
+    </div>
+    <div>
+        <h2>Polls</h2>
+        <div id="pollList"></div>
+    </div>
+
+    <script>
+        let token = null;
+
+        async function register() {
+            const username = document.getElementById('regUsername').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const response = await fetch('http://localhost:8000/api/v1/register/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Registration successful! Please log in.');
+                document.getElementById('regUsername').value = '';
+                document.getElementById('regEmail').value = '';
+                document.getElementById('regPassword').value = '';
+            } else {
+                alert('Registration failed: ' + JSON.stringify(data));
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const response = await fetch('http://localhost:8000/api/v1/token/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                token = data.access;
+                alert('Login successful!');
+                fetchPolls();
+            } else {
+                alert('Login failed: ' + data.detail);
+            }
+        }
+
+        async function changePassword() {
+            const oldPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const response = await fetch('http://localhost:8000/api/v1/change-password/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Password changed successfully!');
+                document.getElementById('oldPassword').value = '';
+                document.getElementById('newPassword').value = '';
+            } else {
+                alert('Password change failed: ' + data.error);
+            }
+        }
+
+        async function fetchPolls() {
+            const response = await fetch('http://localhost:8000/api/v1/polls/', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const polls = await response.json();
+            const pollList = document.getElementById('pollList');
+            pollList.innerHTML = '';
+            polls.forEach(poll => {
+                const div = document.createElement('div');
+                div.className = 'poll';
+                div.innerHTML = `<h3>${poll.title}</h3>`;
+                poll.questions.forEach(question => {
+                    const qDiv = document.createElement('div');
+                    qDiv.className = 'question';
+                    qDiv.innerHTML = `<p>${question.text}</p>`;
+                    question.choices.forEach(choice => {
+                        const cDiv = document.createElement('div');
+                        cDiv.className = 'choice';
+                        cDiv.innerHTML = `
+                            <span>${choice.text} (Votes: ${choice.vote_count})</span>
+                            <button onclick="vote(${poll.id}, ${choice.id})">Vote</button>
+                        `;
+                        qDiv.appendChild(cDiv);
+                    });
+                    div.appendChild(qDiv);
+                });
+                pollList.appendChild(div);
+            });
+        }
+
+        async function createPoll() {
+            const title = document.getElementById('pollTitle').value;
+            const response = await fetch('http://localhost:8000/api/v1/polls/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ title, is_active: true })
+            });
+            if (response.ok) {
+                alert('Poll created!');
+                fetchPolls();
+            } else {
+                alert('Failed to create poll');
+            }
+        }
+
+        async function vote(pollId, choiceId) {
+            const response = await fetch(`http://localhost:8000/api/v1/polls/${pollId}/vote/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ choice_id: choiceId })
+            });
+            if (response.status === 202 || response.status === 201) {
+                alert('Vote processing started!');
+                setTimeout(fetchPolls, 2000);
+            } else {
+                const data = await response.json();
+                alert('Vote failed: ' + data.error);
+            }
+        }
+    </script>
+</body>
+</html>

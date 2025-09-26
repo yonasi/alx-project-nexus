@@ -5,6 +5,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from django.contrib.auth.models import User
+from rest_framework.views import APIView
+from .serializers import UserSerializer
 from .models import Poll, Question, Choice, Vote
 from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer
 from rest_framework.exceptions import PermissionDenied
@@ -12,6 +14,38 @@ from .tasks import process_vote
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class RegisterView(APIView):
+    def post(self, request):
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                'id': user.id,
+                'username': user.username,
+                'email': user.email
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        if not old_password or not new_password:
+            return Response({'error': 'old_password and new_password are required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not user.check_password(old_password):
+            return Response({'error': 'Invalid old password'}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new_password)
+        user.save()
+        logger.info(f"Password changed for user {user.username}")
+        return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
+
 
 class PollViewSet(viewsets.ModelViewSet):
     '''

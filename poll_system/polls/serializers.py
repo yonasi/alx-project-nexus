@@ -1,6 +1,27 @@
 from rest_framework import serializers
 from .models import Poll, Question, Choice, Vote
 from django.db import transaction
+from django.contrib.auth.models import User
+from django.db import IntegrityError
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'password']
+        extra_kwargs = {'password': {'write_only': True}}
+
+    def create(self, validated_data):
+        try:
+            user = User.objects.create_user(
+                username=validated_data['username'],
+                email=validated_data.get('email', ''),
+                password=validated_data['password']
+            )
+            return user
+        except IntegrityError:
+            raise serializers.ValidationError({'username': 'This username is already taken.'})
+
 
 class ChoiceSerializer(serializers.ModelSerializer):
     """
