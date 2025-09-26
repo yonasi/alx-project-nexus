@@ -1,19 +1,20 @@
-from django.shortcuts import render
-from django.db import IntegrityError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
-from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from .serializers import UserSerializer
-from .models import Poll, Question, Choice, Vote
+from .models import Poll, Question, Choice
 from .serializers import PollSerializer, QuestionSerializer, ChoiceSerializer, VoteSerializer
 from rest_framework.exceptions import PermissionDenied
 from .tasks import process_vote
 import logging
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from ratelimit.decorators import ratelimit
+from django.utils.decorators import method_decorator
+from django.core.cache import cache
+from django.views.decorators.cache import cache_page
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,8 @@ class ChangePasswordView(APIView):
         logger.info(f"Password changed for user {user.username}")
         return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
 
+
+@method_decorator(cache_page(60 * 30))  # Cache for 30 minutes
 class PollViewSet(viewsets.ModelViewSet):
     '''
     API endpoint for managing polls.
@@ -116,6 +119,7 @@ class PollViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @ratelimit(key='user', rate='5/m', method='POST', block=True)
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -156,6 +160,25 @@ class PollViewSet(viewsets.ModelViewSet):
         except Choice.DoesNotExist:
             logger.error(f"Invalid choice_id {choice_id} for poll {pk}")
             return Response({'error': 'Invalid choice'}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @ratelimit(key='user', rate='5/m', method='POST', block=True)
+    def vote(self, request, pk=None):
+        poll = self.get_object()
+        serializer = VoteSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            question = serializer.validated_data['question']
+            choice = serializer.validated_data['choice']
+            if question.poll != poll:
+                return Response({"error": "Question does not belong to this poll"}, status=status.HTTP_400_BAD_REQUEST)
+            # Queue Celery task
+            result = process_vote.delay(question.id, choice.id, request.user.id)
+            #clear cache after voting
+            cache.clear()
+            return Response({"message": "Vote processing started", 'task_id': result.id}, status=status.HTTP_202_ACCEPTED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
     '''

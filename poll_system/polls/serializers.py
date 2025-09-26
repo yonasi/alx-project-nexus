@@ -69,6 +69,17 @@ class PollSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'description', 'created_at', 'updated_at', 'end_date', 'created_by', 'is_active', 'questions', 'confirm_reset']
         read_only_fields = ['created_at', 'updated_at']
 
+
+    def validate(self, data):
+        question = data['question']
+        choice = data['choice']
+        if choice.question != question:
+            raise serializers.ValidationError('Choice does not belong to the question.')
+        if Vote.objects.filter(question=question, user=self.context['request'].user).exists():
+            raise serializers.ValidationError('User already voted on this question.')
+        return data    
+
+
     @transaction.atomic
     def create(self, validated_data):
         questions_data = validated_data.pop('questions', [])
