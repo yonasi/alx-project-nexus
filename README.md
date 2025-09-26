@@ -229,6 +229,9 @@ All endpoints are prefixed with /api/v1/.
 
 |Method|Endpoint|Discription|Authentication|
 |---|---|---|---|
+|POST|/api/v1/register/|Register user|None|
+|POST|/api/v1/token/|Login|JWT token|
+|POST|/api/v1/change-password/|Change password|JWT (Bearer token)|
 |GET|polls/|List active polls|None|
 |GET|/polls/{id}/|Get poll detail|None|
 |POST|/polls/|Create a poll|JWT (Bearer token)|
@@ -236,7 +239,7 @@ All endpoints are prefixed with /api/v1/.
 |DELETE|/polls/{id}/|Delete a poll (Creator only)|JWT (Bearer token)|
 |POST|polls/{id}/|Submit a vote|JWT (Bearer token)|
 |GET|/questions/|List all questions|None|
-|DET|/choices/|List all choices|None|
+|GET|/choices/|List all choices|None|
 |POST|/token/|Obtain JWT token|Username/Password|
 |POST|/token/refresh|Refresh JWT token|Refresh token|
 |PATCH|/polls/{id}/|Partially update a poll|JWT (Bearer token)
@@ -280,5 +283,25 @@ All endpoints are prefixed with /api/v1/.
 - Features: Manage polls, questions, choices, votes with inlines, filters, and search.
 
 
+## GraphQL Queries/Mutations
+- **Query:**
+   ```GRAPHQL
+    {
+      allPolls {
+        id
+        title
+        questions { text, choices { text, voteCount } }
+      }
+    }
+    ```
 
-*This repository will be updated as I progress through my final project, adding code, documentation, and reflections on new learnings. Thank you for visiting alx-project-nexus!*
+## Mutation:
+    ```GRAPHQL
+    mutation {
+      createPoll(title: "New Poll") { poll { id, title } }
+      vote(pollId: 1, choiceId: 1) { success, message }
+    }
+    ```
+
+
+*This repository will be updated as I progress through my project, adding code, documentation, and reflections on new learnings. Thank you for visiting alx-project-nexus!*
