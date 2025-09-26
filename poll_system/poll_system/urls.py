@@ -10,6 +10,8 @@ from drf_yasg import openapi
 from polls.views import PollViewSet, QuestionViewSet, ChoiceViewSet, RegisterView, ChangePasswordView
 from graphene_django.views import GraphQLView
 from polls.schema import schema
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
