@@ -121,7 +121,8 @@ class PollViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('You can only update your own polls.')
             
         has_votes = Vote.objects.filter(question__poll=poll).exists()
-        reset_confirmed = self.request.data.get('reset_votes', 'false').lower() == 'true'
+        reset_value = self.request.data.get('reset_votes')
+        reset_confirmed = (reset_value is True) or (isinstance(reset_value, str) and reset_value.lower() == 'true')
 
         if has_votes:
             if not reset_confirmed:
