@@ -11,11 +11,13 @@ class QuestionInline(admin.TabularInline):
 class ChoiceInline(admin.TabularInline):
     model = Choice
     extra = 2  
+    # Ensure denormalized field is read-only in inline forms
+    readonly_fields = ('votes_count',)
     show_change_link = True
 
 @admin.register(Poll)
 class PollAdmin(admin.ModelAdmin):
-    list_display = ('title', 'created_by', 'created_at', 'is_active')
+    list_display = ('title', 'created_by', 'created_at', 'is_active', 'end_date')
     list_filter = ('is_active', 'created_at')
     search_fields = ('title',)
     inlines = [QuestionInline]  # Display questions under each poll
@@ -28,17 +30,14 @@ class QuestionAdmin(admin.ModelAdmin):
 
 @admin.register(Choice)
 class ChoiceAdmin(admin.ModelAdmin):
-    list_display = ('text', 'question', 'get_vote_count')
+    # Use the efficient, denormalized model field 'votes_count' directly
+    list_display = ('text', 'question', 'votes_count')
     list_filter = ('question',)
+    # Ensure the denormalized field cannot be accidentally modified
+    readonly_fields = ('votes_count',) 
     
-    def get_vote_count(self, obj):
-        """
-        Calculates the number of votes for a choice by counting related Vote objects.
-        """
-        return obj.votes.count()
-    
-    get_vote_count.short_description = "Vote Count" # Sets a custom column header
-
 @admin.register(Vote)
 class VoteAdmin(admin.ModelAdmin):
-    list_display = ('choice', 'user', 'created_at')
+    list_display = ('choice', 'question', 'user', 'created_at')
+    list_filter = ('created_at', 'user')
+    search_fields = ('user__username', 'choice__text')
