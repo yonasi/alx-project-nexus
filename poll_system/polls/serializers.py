@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.db import transaction
 from django.contrib.auth.models import User
 from .models import Poll, Question, Choice, Vote
+from rest_framework.exceptions import ValidationError
 
 
 class ChoiceSerializer(serializers.ModelSerializer):
@@ -22,7 +23,6 @@ class QuestionSerializer(serializers.ModelSerializer):
         read_only_fields = ['poll']
 
 
-
 class PollSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True)
     created_by = serializers.ReadOnlyField(source='created_by.username')
@@ -39,68 +39,65 @@ class PollSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         questions_data = validated_data.pop('questions')
-        # 'created_by' is passed via perform_create in the view
         poll = Poll.objects.create(**validated_data) 
 
         for question_data in questions_data:
             choices_data = question_data.pop('choices')
             question = Question.objects.create(poll=poll, **question_data)
             for choice_data in choices_data:
-                # votes_count defaults to 0
                 Choice.objects.create(question=question, **choice_data)
         
         return poll
 
-   
     @transaction.atomic
     def update(self, instance, validated_data):
-        questions_data = validated_data.pop('questions', [])
+        questions_data = validated_data.pop('questions', None)
         
-        # Update Poll fields
+        #Update Poll fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Handle Questions
-        existing_question_ids = set(instance.questions.values_list('id', flat=True))
-        incoming_question_ids = set()
+        #Handle Questions (Only if questions data was provided)
+        if questions_data is not None:
+            existing_question_ids = set(instance.questions.values_list('id', flat=True))
+            incoming_question_ids = set()
 
-        for question_data in questions_data:
-            choices_data = question_data.pop('choices', [])
-            question_id = question_data.get('id', None)
+            for question_data in questions_data:
+                choices_data = question_data.pop('choices', [])
+                question_id = question_data.get('id', None)
 
-            if question_id in existing_question_ids:
-                # Update existing question
-                Question.objects.filter(id=question_id).update(text=question_data['text'])
-                question = Question.objects.get(id=question_id)
-                incoming_question_ids.add(question_id)
-            else:
-                # Create new question
-                question = Question.objects.create(poll=instance, **question_data)
-
-            # Handle Choices for this question
-            existing_choice_ids = set(question.choices.values_list('id', flat=True))
-            incoming_choice_ids = set()
-            
-            for choice_data in choices_data:
-                choice_id = choice_data.get('id', None)
-
-                if choice_id in existing_choice_ids:
-                    # Update existing choice (text only, votes_count is read-only)
-                    Choice.objects.filter(id=choice_id).update(text=choice_data['text'])
-                    incoming_choice_ids.add(choice_id)
+                if question_id and question_id in existing_question_ids:
+                    # Update existing question
+                    Question.objects.filter(id=question_id).update(text=question_data['text'])
+                    question = Question.objects.get(id=question_id)
+                    incoming_question_ids.add(question_id)
                 else:
-                    # Create new choice
-                    Choice.objects.create(question=question, **choice_data)
+                    # Create new question
+                    question = Question.objects.create(poll=instance, **question_data)
+                    
+                # Handle Choices for this question
+                existing_choice_ids = set(question.choices.values_list('id', flat=True))
+                incoming_choice_ids = set()
+                
+                for choice_data in choices_data:
+                    choice_id = choice_data.get('id', None)
 
-            # Delete choices that were in the DB but are not in the incoming data
-            Choice.objects.filter(question=question).exclude(id__in=incoming_choice_ids).delete()
+                    if choice_id and choice_id in existing_choice_ids:
+                        # Update existing choice (text only, votes_count is read-only)
+                        Choice.objects.filter(id=choice_id).update(text=choice_data['text'])
+                        incoming_choice_ids.add(choice_id)
+                    else:
+                        # Create new choice
+                        Choice.objects.create(question=question, **choice_data)
 
-        # Delete questions that were in the DB but are not in the incoming data
-        instance.questions.exclude(id__in=incoming_question_ids).delete()
+                # Delete choices that were in the DB but are not in the incoming data
+                Choice.objects.filter(question=question).exclude(id__in=incoming_choice_ids).delete()
+
+            # Delete questions that were in the DB but are not in the incoming data
+            instance.questions.exclude(id__in=incoming_question_ids).delete()
 
         return instance
-
 
 
 class VoteSerializer(serializers.ModelSerializer):
@@ -110,12 +107,10 @@ class VoteSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'created_at']
 
     def validate(self, data):
-        # We perform duplicate vote check in the view/DB task, but this catches simple errors early.
         if Vote.objects.filter(question=data['question'], user=self.context['request'].user).exists():
             raise serializers.ValidationError('User already voted on this question.')
         return data
 
-#
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

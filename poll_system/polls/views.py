@@ -22,7 +22,7 @@ from django_ratelimit.decorators import ratelimit
 
 logger = logging.getLogger(__name__)
 
-# Utility Functions for Cache Invalidation (Kept the same)
+# Utility Functions for Cache Invalidation 
 def get_poll_stats_cache_key(poll_pk):
     """Generates the cache key fragment for poll stats."""
     return f'poll_stats_pk_{poll_pk}'
@@ -35,9 +35,7 @@ def invalidate_poll_stats_cache(poll_pk):
 
 
 class RegisterView(APIView):
-    # FIX: Explicitly set permission_classes to an empty list 
-    # to allow unauthenticated access for user creation (Point 1)
-    permission_classes = [] 
+    permission_classes = []  # to allow unauthenticated access for user creation 
 
     @swagger_auto_schema(
         request_body=openapi.Schema(
@@ -74,7 +72,6 @@ class RegisterView(APIView):
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
-    # ... (rest of ChangePasswordView remains the same)
 
     @swagger_auto_schema(
         request_body=openapi.Schema(
@@ -109,7 +106,6 @@ class ChangePasswordView(APIView):
 
 
 class PollViewSet(viewsets.ModelViewSet):
-    # ... (rest of PollViewSet remains the same)
     queryset = Poll.objects.filter(is_active=True).prefetch_related('questions__choices') 
     serializer_class = PollSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -249,11 +245,11 @@ class PollViewSet(viewsets.ModelViewSet):
             question_votes = 0
             choices_data = []
 
-            # 1. Calculate question total votes
+            #Calculate question total votes
             for choice in question.choices.all():
                 question_votes += choice.votes_count
 
-            # 2. Build choice data with percentages
+            #Build choice data with percentages
             for choice in question.choices.all():
                 votes = choice.votes_count
                 percentage = (votes / question_votes * 100) if question_votes > 0 else 0
@@ -265,7 +261,6 @@ class PollViewSet(viewsets.ModelViewSet):
                     'percentage': round(percentage, 2)
                 })
 
-            # 3. Aggregate into question structure
             poll_stats['questions'].append({
                 'question_id': question.id,
                 'question_text': question.text,
@@ -279,10 +274,10 @@ class PollViewSet(viewsets.ModelViewSet):
 
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
-    # FIX: Ensure QuestionViewSet uses the correct serializer (QuestionSerializer)
     queryset = Question.objects.all().prefetch_related('choices')
     serializer_class = QuestionSerializer 
     permission_classes = [IsAuthenticatedOrReadOnly]
+
 
 class ChoiceViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Choice.objects.all()
