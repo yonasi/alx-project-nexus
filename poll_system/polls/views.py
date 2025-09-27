@@ -1,3 +1,4 @@
+import logging
 from django.shortcuts import render
 from django.db import IntegrityError, transaction
 from rest_framework import viewsets, status
@@ -17,12 +18,11 @@ from django.utils.decorators import method_decorator
 from django.core.cache import cache
 from django.views.decorators.cache import cache_page
 from django_ratelimit.decorators import ratelimit
-import logging
 
 
 logger = logging.getLogger(__name__)
 
-
+# Utility Functions for Cache Invalidation (Kept the same)
 def get_poll_stats_cache_key(poll_pk):
     """Generates the cache key fragment for poll stats."""
     return f'poll_stats_pk_{poll_pk}'
@@ -30,12 +30,15 @@ def get_poll_stats_cache_key(poll_pk):
 def invalidate_poll_stats_cache(poll_pk):
     """Clears the cache for a specific poll's stats view."""
     cache_key = get_poll_stats_cache_key(poll_pk)
-    # Using pattern matching to clear the cache page
     cache.delete_pattern(f'*{cache_key}*') 
     logger.info(f"Invalidated cache for poll stats key pattern: *{cache_key}*")
 
 
 class RegisterView(APIView):
+    # FIX: Explicitly set permission_classes to an empty list 
+    # to allow unauthenticated access for user creation (Point 1)
+    permission_classes = [] 
+
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -71,6 +74,7 @@ class RegisterView(APIView):
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
+    # ... (rest of ChangePasswordView remains the same)
 
     @swagger_auto_schema(
         request_body=openapi.Schema(
@@ -105,16 +109,7 @@ class ChangePasswordView(APIView):
 
 
 class PollViewSet(viewsets.ModelViewSet):
-    '''
-    API endpoint for managing polls.
-    - GET /api/v1/polls/: List all polls.
-    - GET /api/v1/polls/{id}/: Retrieve poll details.
-    - POST /api/v1/polls/: Create a poll (authenticated).
-    - PUT /api/v1/polls/{id}/: Update a poll (creator only).
-    - DELETE /api/v1/polls/{id}/: Delete a poll (creator only).
-    - POST /api/v1/polls/{id}/vote/: Submit a vote (authenticated).
-    - GET /api/v1/polls/{id}/stats/: View poll vote statistics.
-    '''
+    # ... (rest of PollViewSet remains the same)
     queryset = Poll.objects.filter(is_active=True).prefetch_related('questions__choices') 
     serializer_class = PollSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -134,25 +129,23 @@ class PollViewSet(viewsets.ModelViewSet):
 
         if has_votes:
             if not reset_confirmed:
-                #give  Warning if without confirmation flag
                 raise ValidationError({
                     'warning': 'This poll has recorded votes. To update, you must confirm vote reset.',
                     'action_required': 'Send "reset_votes": true in your request body to reset all votes for this poll.'
                 })
             
-            # If confirmed, reset votes
             if reset_confirmed:
                 Vote.objects.filter(question__poll=poll).delete()
                 Choice.objects.filter(question__poll=poll).update(votes_count=0)
                 logger.info(f"Votes reset for poll {poll.pk} by user {self.request.user.id}")
-                invalidate_poll_stats_cache(poll.pk) # Invalidate stats cache
+                invalidate_poll_stats_cache(poll.pk)
 
         serializer.save()
 
     def perform_destroy(self, instance):
         if instance.created_by != self.request.user:
             raise PermissionDenied('You can only delete your own polls.')
-        invalidate_poll_stats_cache(instance.pk) # Invalidate stats cache before delete
+        invalidate_poll_stats_cache(instance.pk) 
         instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
@@ -256,9 +249,11 @@ class PollViewSet(viewsets.ModelViewSet):
             question_votes = 0
             choices_data = []
 
+            # 1. Calculate question total votes
             for choice in question.choices.all():
                 question_votes += choice.votes_count
 
+            # 2. Build choice data with percentages
             for choice in question.choices.all():
                 votes = choice.votes_count
                 percentage = (votes / question_votes * 100) if question_votes > 0 else 0
@@ -270,6 +265,7 @@ class PollViewSet(viewsets.ModelViewSet):
                     'percentage': round(percentage, 2)
                 })
 
+            # 3. Aggregate into question structure
             poll_stats['questions'].append({
                 'question_id': question.id,
                 'question_text': question.text,
@@ -283,10 +279,10 @@ class PollViewSet(viewsets.ModelViewSet):
 
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
+    # FIX: Ensure QuestionViewSet uses the correct serializer (QuestionSerializer)
     queryset = Question.objects.all().prefetch_related('choices')
     serializer_class = QuestionSerializer 
     permission_classes = [IsAuthenticatedOrReadOnly]
-
 
 class ChoiceViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Choice.objects.all()
