@@ -3,24 +3,25 @@ from graphene_django import DjangoObjectType
 from .models import Poll, Question, Choice
 from .tasks import process_vote
 
-
 class PollType(DjangoObjectType):
     class Meta:
         model = Poll
         fields = ('id', 'title', 'created_at', 'created_by', 'is_active', 'questions')
-
 
 class QuestionType(DjangoObjectType):
     class Meta:
         model = Question
         fields = ('id', 'text', 'poll', 'choices')
 
-
 class ChoiceType(DjangoObjectType):
+    vote_count = graphene.Int()
+
     class Meta:
         model = Choice
-        fields = ('id', 'text', 'vote_count', 'question')
+        fields = ('id', 'text', 'question', 'vote_count')
 
+    def resolve_vote_count(self, info):
+        return self.votes.count()
 
 class Query(graphene.ObjectType):
     all_polls = graphene.List(PollType)
@@ -32,7 +33,6 @@ class Query(graphene.ObjectType):
     def resolve_poll(self, info, id):
         return Poll.objects.get(id=id, is_active=True)
 
-
 class CreatePollMutation(graphene.Mutation):
     class Arguments:
         title = graphene.String(required=True)
@@ -43,7 +43,6 @@ class CreatePollMutation(graphene.Mutation):
             raise Exception("Authentication required")
         poll = Poll.objects.create(title=title, created_by=info.context.user, is_active=True)
         return CreatePollMutation(poll=poll)
-
 
 class VoteMutation(graphene.Mutation):
     class Arguments:
@@ -60,7 +59,6 @@ class VoteMutation(graphene.Mutation):
         question = choice.question
         task = process_vote.delay(question.id, choice_id, info.context.user.id)
         return VoteMutation(success=True, message='Vote queued')
-
 
 class Mutation(graphene.ObjectType):
     create_poll = CreatePollMutation.Field()

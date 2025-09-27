@@ -13,9 +13,12 @@ from .tasks import process_vote
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils.decorators import method_decorator
+from django.core.cache import cache
 from django.views.decorators.cache import cache_page
-import logging
 from django_ratelimit.decorators import ratelimit
+from django.db.models import Count
+import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +90,7 @@ class ChangePasswordView(APIView):
         logger.info(f"Password changed for user {user.username}")
         return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
 
-@method_decorator(cache_page(60 * 30), name='dispatch')  # Cache for 30 minutes
+@method_decorator(cache_page(60 * 1), name='dispatch')  # Cache for 30 minutes
 class PollViewSet(viewsets.ModelViewSet):
     '''
     API endpoint for managing polls.
@@ -117,7 +120,7 @@ class PollViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    @ratelimit(key='user', rate='5/m', method='POST', block='True') 
+    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -151,11 +154,13 @@ class PollViewSet(viewsets.ModelViewSet):
         try:
             choice = Choice.objects.get(id=choice_id, question__poll=poll)
             question = choice.question
+            if Vote.objects.filter(question=question, user=request.user).exists():
+                logger.error(f"User {request.user.id} already voted on question {question.id}")
+                return Response({'error': 'User already voted on this question'}, status=status.HTTP_400_BAD_REQUEST)
             task = process_vote.delay(question.id, choice_id, request.user.id)
             logger.info(f"Vote task queued for poll {pk}, choice {choice_id}, user {request.user.id}, task {task.id}")
-            from django.core.cache import cache
-            cache.clear()  # Clear cache after vote
-            return Response({'message': 'Vote processing started', 'task_id': task.id}, status=status.HTTP_202_ACCEPTED)
+            cache.clear()
+            return Response({"message": "Vote processing started", 'task_id': task.id}, status=status.HTTP_202_ACCEPTED)
         except Choice.DoesNotExist:
             logger.error(f"Invalid choice_id {choice_id} for poll {pk}")
             return Response({'error': 'Invalid choice'}, status=status.HTTP_400_BAD_REQUEST)
@@ -184,12 +189,9 @@ class PollViewSet(viewsets.ModelViewSet):
         '''
         poll = self.get_object()
         total_votes = Vote.objects.filter(question__poll=poll).count()
-        top_choice = Choice.objects.filter(question__poll=poll).order_by('-vote_count').first()
-        vote_distribution = {
-            choice.text: choice.vote_count
-            for question in poll.questions.all()
-            for choice in question.choices.all()
-        }
+        choices = Choice.objects.filter(question__poll=poll).annotate(num_votes=Count('votes'))
+        top_choice = choices.order_by('-num_votes').first()
+        vote_distribution = {choice.text: choice.num_votes for choice in choices}
         return Response({
             'total_votes': total_votes,
             'top_choice': top_choice.text if top_choice else None,

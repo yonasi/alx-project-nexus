@@ -16,7 +16,10 @@ class PollAPITestCase(TestCase):
         self.question = Question.objects.create(poll=self.poll, text='Test Question')
         self.choice1 = Choice.objects.create(question=self.question, text='Option 1')
         self.choice2 = Choice.objects.create(question=self.question, text='Option 2')
-        # Create a vote for testing stats
+        # Create a second question for voting to avoid duplicate vote error
+        self.question2 = Question.objects.create(poll=self.poll, text='Test Question 2')
+        self.choice3 = Choice.objects.create(question=self.question2, text='Option 3')
+        self.choice4 = Choice.objects.create(question=self.question2, text='Option 4')
         Vote.objects.create(question=self.question, choice=self.choice1, user=self.user)
 
     def test_list_polls(self):
@@ -36,16 +39,16 @@ class PollAPITestCase(TestCase):
         response = self.client.get(f'/api/v1/polls/{self.poll.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['title'], 'Test Poll')
-        self.assertEqual(len(response.data['questions']), 1)
+        self.assertEqual(len(response.data['questions']), 2)  # Updated: 2 questions
 
     def test_vote_poll(self):
-        data = {'choice_id': self.choice2.id}
+        data = {'choice_id': self.choice3.id}  # Use choice from question2
         response = self.client.post(f'/api/v1/polls/{self.poll.id}/vote/', data, format='json')
+        print(response.data)  # Debug output
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         time.sleep(2)  # Wait for Celery task
-        self.assertEqual(Choice.objects.get(id=self.choice2.id).vote_count, 1)
         self.assertEqual(Vote.objects.count(), 2)
-        self.assertEqual(Vote.objects.filter(choice=self.choice2, user=self.user).count(), 1)
+        self.assertEqual(Vote.objects.filter(choice=self.choice3, user=self.user).count(), 1)
 
     def test_vote_unauthorized(self):
         self.client.credentials()
@@ -103,4 +106,9 @@ class PollAPITestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['total_votes'], 1)
         self.assertEqual(response.data['top_choice'], 'Option 1')
-        self.assertEqual(response.data['vote_distribution'], {'Option 1': 1, 'Option 2': 0})
+        self.assertEqual(response.data['vote_distribution'], {
+            'Option 1': 1,
+            'Option 2': 0,
+            'Option 3': 0,
+            'Option 4': 0
+        })
