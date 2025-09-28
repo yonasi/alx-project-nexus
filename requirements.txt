@@ -9,6 +9,7 @@ click-repl==0.3.0
 colorama==0.4.6
 dj-database-url==3.0.1
 Django==5.2.6
+django-cors-headers==4.9.0
 django-ratelimit==4.1.0
 django-redis==6.0.0
 djangorestframework==3.16.1

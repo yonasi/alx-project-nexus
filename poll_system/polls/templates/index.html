@@ -1,174 +1,742 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Online Poll System</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poll System Web Application</title>
+    <!-- Load Tailwind CSS from CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .poll { margin-bottom: 20px; }
-        button { margin: 5px; }
-        .question { margin-left: 20px; }
-        .choice { margin-left: 40px; }
-        .form-section { margin-bottom: 20px; }
+        /* Define Inter font globally */
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        /* Style for the JSON output box or general text output */
+        .output-box {
+            background-color: #f3f4f6;
+            color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: monospace;
+            white-space: pre-wrap;
+            min-height: 50px;
+            overflow-x: auto;
+            border: 1px solid #e5e7eb;
+        }
+        /* Style for modal backdrop */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
     </style>
 </head>
-<body>
-    <h1>Online Poll System</h1>
-    <div class="form-section">
-        <h2>Register</h2>
-        <input type="text" id="regUsername" placeholder="Username">
-        <input type="email" id="regEmail" placeholder="Email">
-        <input type="password" id="regPassword" placeholder="Password">
-        <button onclick="register()">Register</button>
-    </div>
-    <div class="form-section">
-        <h2>Login</h2>
-        <input type="text" id="username" placeholder="Username">
-        <input type="password" id="password" placeholder="Password">
-        <button onclick="login()">Login</button>
-    </div>
-    <div class="form-section">
-        <h2>Change Password</h2>
-        <input type="password" id="oldPassword" placeholder="Old Password">
-        <input type="password" id="newPassword" placeholder="New Password">
-        <button onclick="changePassword()">Change Password</button>
-    </div>
-    <div class="form-section">
-        <h2>Create Poll</h2>
-        <input type="text" id="pollTitle" placeholder="Poll Title">
-        <button onclick="createPoll()">Create Poll</button>
-    </div>
-    <div>
-        <h2>Polls</h2>
-        <div id="pollList"></div>
+<body class="min-h-screen p-4 sm:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto bg-white shadow-2xl rounded-xl p-6 sm:p-10">
+
+        <!-- Header -->
+        <header class="mb-8 border-b pb-4">
+            <h1 class="text-3xl font-extrabold text-indigo-700">Decentralized Poll System</h1>
+            <p class="text-gray-500 text-sm">A full-featured client for your Django REST API.</p>
+        </header>
+
+        <!-- Auth Status and Logout -->
+        <div id="auth-status" class="flex justify-between items-center mb-6 p-3 bg-gray-100 rounded-lg">
+            <span id="auth-message" class="text-sm font-medium text-gray-700"></span>
+            <button id="logout-button" class="hidden bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded-lg text-sm transition duration-150">Logout</button>
+        </div>
+
+        <!-- Main Content Container -->
+        <div id="content-container">
+            <!-- Views (Auth, Dashboard, Vote/Stats) are rendered here -->
+        </div>
+        
+        <!-- Global Message/Error Box -->
+        <div id="message-container" class="fixed bottom-4 right-4 z-50 space-y-2">
+            <!-- Messages injected here -->
+        </div>
+
     </div>
 
+    <!-- Modal for Poll Creation/Editing -->
+    <div id="poll-modal" class="modal-backdrop hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 transform transition-all duration-300">
+            <h2 id="modal-title" class="text-2xl font-bold mb-4 text-indigo-700">Create New Poll</h2>
+            
+            <form id="poll-form" class="space-y-4">
+                <input type="hidden" id="poll-id-field">
+                
+                <div>
+                    <label for="poll-title" class="block text-sm font-medium text-gray-700">Poll Title</label>
+                    <input type="text" id="poll-title" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label for="poll-description" class="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea id="poll-description" rows="2" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+                
+                <div class="flex space-x-4">
+                    <div class="flex-1">
+                        <label for="poll-end-date" class="block text-sm font-medium text-gray-700">End Date/Time</label>
+                        <input type="datetime-local" id="poll-end-date" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="flex-1 flex items-end">
+                         <label class="flex items-center space-x-2 text-sm font-medium text-gray-700">
+                            <input type="checkbox" id="poll-is-active" class="form-checkbox h-5 w-5 text-indigo-600 rounded">
+                            <span>Active</span>
+                        </label>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+                <h3 class="text-xl font-semibold mb-2 text-gray-800">Questions & Choices</h3>
+                <div id="questions-container" class="space-y-4">
+                    <!-- Dynamic Questions and Choices will be inserted here -->
+                </div>
+                
+                <button type="button" id="add-question-button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg text-sm transition duration-150 w-full border border-dashed border-gray-400">
+                    + Add New Question
+                </button>
+
+                <div class="flex justify-end space-x-3 pt-4 border-t">
+                    <button type="button" id="close-modal-button" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150">Cancel</button>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition duration-150">Save Poll</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- JavaScript Logic -->
     <script>
-        let token = null;
+        // CRITICAL: Use 127.0.0.1 for CORS consistency if running Django on localhost:8000
+        const API_BASE_URL = 'http://127.0.0.1:8000/api/v1'; 
+        
+        let state = {
+            isAuthenticated: false,
+            token: localStorage.getItem('poll_token') || null,
+            activePoll: null, // Stores the full poll object when viewing/voting
+            currentView: 'dashboard',
+            polls: [],
+            message: null,
+            error: null,
+        };
 
-        async function register() {
-            const username = document.getElementById('regUsername').value;
-            const email = document.getElementById('regEmail').value;
-            const password = document.getElementById('regPassword').value;
-            const response = await fetch('http://localhost:8000/api/v1/register/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password })
-            });
-            const data = await response.json();
-            if (response.ok) {
-                alert('Registration successful! Please log in.');
-                document.getElementById('regUsername').value = '';
-                document.getElementById('regEmail').value = '';
-                document.getElementById('regPassword').value = '';
+        const elements = {
+            content: document.getElementById('content-container'),
+            authMessage: document.getElementById('auth-message'),
+            logoutButton: document.getElementById('logout-button'),
+            messageContainer: document.getElementById('message-container'),
+            pollModal: document.getElementById('poll-modal'),
+            modalTitle: document.getElementById('modal-title'),
+            pollForm: document.getElementById('poll-form'),
+            questionsContainer: document.getElementById('questions-container'),
+            addQuestionButton: document.getElementById('add-question-button'),
+            closeModalButton: document.getElementById('close-modal-button'),
+        };
+
+        // --- Utility Functions ---
+
+        /** Fetches API data with authentication and error handling. */
+        async function apiFetch(endpoint, method = 'GET', body = null) {
+            const url = `${API_BASE_URL}/${endpoint}`;
+            const headers = { 'Content-Type': 'application/json' };
+            
+            if (state.token) {
+                headers['Authorization'] = `Bearer ${state.token}`;
+            }
+
+            const config = { method, headers };
+
+            if (body && method !== 'GET') {
+                try {
+                    config.body = JSON.stringify(body);
+                } catch (e) {
+                    updateState({ error: `Invalid JSON body: ${e.message}` });
+                    return { ok: false, data: null };
+                }
+            }
+
+            try {
+                const response = await fetch(url, config);
+                const data = response.status !== 204 && response.status !== 205 ? await response.json().catch(() => ({})) : null;
+
+                if (!response.ok) {
+                    const errorMessage = data && (data.detail || data.title || data[Object.keys(data)[0]] || response.statusText);
+                    updateState({ error: `API Error (${response.status}): ${errorMessage}` });
+                    return { ok: false, status: response.status, data: data };
+                }
+                return { ok: true, status: response.status, data: data };
+            } catch (error) {
+                updateState({ error: `Network Error: Failed to connect to API at ${url}.` });
+                return { ok: false, data: null };
+            }
+        }
+        
+        /** Renders a styled message box. */
+        function renderMessage(type, content) {
+            const isError = type === 'error';
+            const bgColor = isError ? 'bg-red-100' : 'bg-green-100';
+            const textColor = isError ? 'text-red-800' : 'text-green-800';
+            const icon = isError 
+                ? '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+                : '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+
+            const messageBox = document.createElement('div');
+            messageBox.className = `p-4 rounded-lg flex items-center shadow-lg ${bgColor} ${textColor} max-w-sm`;
+            messageBox.innerHTML = `
+                ${icon}
+                <div class="ml-3 text-sm font-medium">${content}</div>
+            `;
+            elements.messageContainer.prepend(messageBox);
+            
+            setTimeout(() => {
+                messageBox.remove();
+            }, 5000);
+        }
+
+        // --- State Management ---
+
+        /** Updates the state and re-renders the view. */
+        function updateState(newState) {
+            Object.assign(state, newState);
+            localStorage.setItem('poll_token', state.token || '');
+            renderView();
+        }
+
+        /** Main rendering function. */
+        function renderView() {
+            // 1. Handle Authentication Visibility
+            const isLoggedIn = !!state.token;
+            state.isAuthenticated = isLoggedIn; // Sync derived state
+            
+            if (isLoggedIn) {
+                elements.authMessage.textContent = `Authenticated. Welcome!`;
+                elements.logoutButton.classList.remove('hidden');
             } else {
-                alert('Registration failed: ' + JSON.stringify(data));
+                elements.authMessage.textContent = `Please log in or register.`;
+                elements.logoutButton.classList.add('hidden');
+                // Force view to Auth
+                state.currentView = 'auth';
+            }
+            
+            // 2. Handle Global Messages/Errors
+            if (state.error) {
+                renderMessage('error', state.error);
+                state.error = null;
+            }
+            if (state.message) {
+                renderMessage('message', state.message);
+                state.message = null;
+            }
+            
+            // 3. Render Current View
+            elements.content.innerHTML = '';
+            if (state.currentView === 'auth') {
+                elements.content.innerHTML = renderAuthView();
+            } else if (state.currentView === 'dashboard') {
+                elements.content.innerHTML = renderDashboardView();
+                renderPollList();
+            } else if (state.currentView === 'vote') {
+                elements.content.innerHTML = renderVoteView();
+                renderVoteDetails(state.activePoll);
+            } else if (state.currentView === 'stats') {
+                elements.content.innerHTML = renderStatsView();
+                renderStatsDetails(state.activePoll);
             }
         }
 
-        async function login() {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const response = await fetch('http://localhost:8000/api/v1/token/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
-            const data = await response.json();
-            if (response.ok) {
-                token = data.access;
-                alert('Login successful!');
+        // --- View Rendering ---
+
+        function renderAuthView() {
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Login Card -->
+                    <div class="bg-indigo-50 p-6 rounded-xl shadow-lg">
+                        <h2 class="text-2xl font-bold mb-4 text-indigo-700">Login</h2>
+                        <form id="login-form" class="space-y-4">
+                            <input id="login-username" type="text" placeholder="Username" value="testuser" required class="w-full p-3 border border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                            <input id="login-password" type="password" placeholder="Password" value="password" required class="w-full p-3 border border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition duration-150 shadow-md">Log In</button>
+                        </form>
+                    </div>
+
+                    <!-- Register Card -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h2 class="text-2xl font-bold mb-4 text-gray-700">Register</h2>
+                        <form id="register-form" class="space-y-4">
+                            <input id="register-username" type="text" placeholder="New Username" required class="w-full p-3 border rounded-lg focus:ring-green-500 focus:border-green-500">
+                            <input id="register-email" type="email" placeholder="Email" required class="w-full p-3 border rounded-lg focus:ring-green-500 focus:border-green-500">
+                            <input id="register-password" type="password" placeholder="Password" required class="w-full p-3 border rounded-lg focus:ring-green-500 focus:border-green-500">
+                            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition duration-150 shadow-md">Register Account</button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDashboardView() {
+            return `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">Poll Dashboard</h2>
+                    <div class="space-x-2">
+                        <button onclick="fetchPolls()" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition duration-150">Refresh</button>
+                        <button onclick="openPollModal()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition duration-150">Create New Poll</button>
+                    </div>
+                </div>
+                <div id="poll-list-container" class="space-y-4">
+                    <!-- Poll Cards will be injected here -->
+                </div>
+            `;
+        }
+
+        function renderVoteView() {
+            return `
+                <button onclick="updateState({currentView: 'dashboard', activePoll: null})" class="text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center text-sm font-medium">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    Back to Dashboard
+                </button>
+                <h2 class="text-3xl font-bold mb-6 text-gray-800">${state.activePoll ? state.activePoll.title : 'Poll Details'}</h2>
+                
+                <div id="vote-questions-container" class="bg-indigo-50 p-6 rounded-xl shadow-lg space-y-6">
+                    <!-- Questions/Choices injected here -->
+                </div>
+                <button id="cast-vote-button" class="mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition duration-150 shadow-md w-full">Cast Your Vote</button>
+                <button onclick="handleViewStats(${state.activePoll.id})" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-6 rounded-lg transition duration-150 w-full">
+                    View Current Statistics
+                </button>
+            `;
+        }
+
+        function renderStatsView() {
+            return `
+                <button onclick="handleViewVote(${state.activePoll.id})" class="text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center text-sm font-medium">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    Back to Voting
+                </button>
+                <h2 class="text-3xl font-bold mb-6 text-gray-800">${state.activePoll ? state.activePoll.title : 'Poll Statistics'}</h2>
+                
+                <div class="flex justify-end mb-4">
+                    <button id="refresh-stats-button" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition duration-150">Refresh Stats</button>
+                </div>
+                
+                <div id="stats-questions-container" class="bg-gray-50 p-6 rounded-xl shadow-lg space-y-6">
+                    <!-- Stats injected here -->
+                </div>
+            `;
+        }
+
+
+        // --- Authentication Logic ---
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            const { ok, data } = await apiFetch('token/', 'POST', { username, password });
+            
+            if (ok) {
+                updateState({ token: data.access, message: 'Login successful!', currentView: 'dashboard' });
                 fetchPolls();
             } else {
-                alert('Login failed: ' + data.detail);
+                // Error handled in apiFetch
             }
         }
 
-        async function changePassword() {
-            const oldPassword = document.getElementById('oldPassword').value;
-            const newPassword = document.getElementById('newPassword').value;
-            const response = await fetch('http://localhost:8000/api/v1/change-password/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
-            });
-            const data = await response.json();
-            if (response.ok) {
-                alert('Password changed successfully!');
-                document.getElementById('oldPassword').value = '';
-                document.getElementById('newPassword').value = '';
-            } else {
-                alert('Password change failed: ' + data.error);
+        async function handleRegister(e) {
+            e.preventDefault();
+            const username = document.getElementById('register-username').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+
+            // Note: Assuming you have a standard 'register/' endpoint configured
+            const { ok } = await apiFetch('register/', 'POST', { username, email, password });
+
+            if (ok) {
+                updateState({ message: 'Registration successful! Please log in now.' });
+                // Automatically switch to login view or keep on auth view
+                document.getElementById('login-username').value = username;
+                document.getElementById('login-password').value = password;
             }
         }
 
+        function handleLogout() {
+            updateState({ token: null, activePoll: null, message: 'Logged out.', currentView: 'auth' });
+        }
+
+
+        // --- Poll CRUD and Dashboard Logic ---
+        
         async function fetchPolls() {
-            const response = await fetch('http://localhost:8000/api/v1/polls/', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const polls = await response.json();
-            const pollList = document.getElementById('pollList');
-            pollList.innerHTML = '';
-            polls.forEach(poll => {
-                const div = document.createElement('div');
-                div.className = 'poll';
-                div.innerHTML = `<h3>${poll.title}</h3>`;
-                poll.questions.forEach(question => {
-                    const qDiv = document.createElement('div');
-                    qDiv.className = 'question';
-                    qDiv.innerHTML = `<p>${question.text}</p>`;
-                    question.choices.forEach(choice => {
-                        const cDiv = document.createElement('div');
-                        cDiv.className = 'choice';
-                        cDiv.innerHTML = `
-                            <span>${choice.text} (Votes: ${choice.vote_count})</span>
-                            <button onclick="vote(${poll.id}, ${choice.id})">Vote</button>
-                        `;
-                        qDiv.appendChild(cDiv);
-                    });
-                    div.appendChild(qDiv);
-                });
-                pollList.appendChild(div);
-            });
+            if (!state.isAuthenticated) return;
+            const { ok, data } = await apiFetch('polls/');
+            if (ok) {
+                updateState({ polls: data, message: 'Poll list refreshed.' });
+            }
+        }
+        
+        function renderPollList() {
+            const container = document.getElementById('poll-list-container');
+            if (!container) return; // Prevent errors if we're not on the dashboard view
+
+            container.innerHTML = state.polls.map(poll => {
+                const endDate = new Date(poll.end_date).toLocaleString();
+                return `
+                    <div class="bg-white p-4 border border-gray-200 rounded-lg shadow-md flex flex-col md:flex-row justify-between items-start md:items-center transition duration-150 hover:shadow-lg">
+                        <div class="flex-1 min-w-0 mb-3 md:mb-0">
+                            <h3 class="text-lg font-bold text-gray-900">${poll.title}</h3>
+                            <p class="text-sm text-gray-500 truncate">${poll.description}</p>
+                            <p class="text-xs text-gray-400 mt-1">
+                                Questions: ${poll.questions.length} | 
+                                <span class="font-semibold text-red-500">Ends: ${endDate}</span>
+                            </p>
+                        </div>
+                        <div class="flex space-x-2 flex-shrink-0">
+                            <button onclick="handleViewVote(${poll.id})" class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition duration-150">Vote / Stats</button>
+                            <button onclick="handleEditPoll(${poll.id})" class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-3 rounded-lg text-sm transition duration-150">Edit</button>
+                            <button onclick="handleDeletePoll(${poll.id})" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-3 rounded-lg text-sm transition duration-150">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            if (state.polls.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-8">No polls available. Create one to get started!</p>';
+            }
         }
 
-        async function createPoll() {
-            const title = document.getElementById('pollTitle').value;
-            const response = await fetch('http://localhost:8000/api/v1/polls/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ title, is_active: true })
+        // --- Poll Modal CRUD Logic ---
+
+        function openPollModal(poll = null) {
+            elements.pollForm.reset();
+            const now = new Date();
+            // Set default end date to 24 hours from now
+            now.setHours(now.getHours() + 24);
+            const defaultEndDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+            document.getElementById('poll-end-date').value = defaultEndDate;
+            
+            elements.questionsContainer.innerHTML = '';
+            
+            if (poll) {
+                // Edit mode
+                elements.modalTitle.textContent = "Edit Poll";
+                document.getElementById('poll-id-field').value = poll.id;
+                document.getElementById('poll-title').value = poll.title;
+                document.getElementById('poll-description').value = poll.description;
+                document.getElementById('poll-is-active').checked = poll.is_active;
+                
+                const pollEndDate = new Date(poll.end_date);
+                const localEndDate = new Date(pollEndDate.getTime() - (pollEndDate.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+                document.getElementById('poll-end-date').value = localEndDate;
+
+                poll.questions.forEach(q => addQuestion(q));
+
+            } else {
+                // Create mode
+                elements.modalTitle.textContent = "Create New Poll";
+                document.getElementById('poll-id-field').value = '';
+                addQuestion(); // Start with one question
+            }
+            
+            elements.pollModal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            elements.pollModal.classList.add('hidden');
+        }
+
+        function addQuestion(question = null) {
+            const qIndex = elements.questionsContainer.children.length;
+            const qId = question ? question.id : '';
+            
+            const qDiv = document.createElement('div');
+            qDiv.className = 'border p-4 rounded-lg bg-gray-50 relative';
+            qDiv.dataset.questionId = qId;
+            
+            qDiv.innerHTML = `
+                <button type="button" class="absolute top-2 right-2 text-red-500 hover:text-red-700" onclick="this.closest('.border').remove()">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+                <input type="hidden" name="question-id-${qIndex}" value="${qId}">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Question Text</label>
+                <input type="text" name="question-text-${qIndex}" value="${question ? question.text : ''}" required class="w-full p-2 border rounded-lg mb-3">
+                
+                <h4 class="text-sm font-semibold mb-2">Choices:</h4>
+                <div class="space-y-2" data-choices-container-for-q="${qIndex}">
+                    <!-- Choices injected here -->
+                </div>
+                <button type="button" class="mt-3 text-indigo-600 hover:text-indigo-800 text-sm" onclick="addChoice(this.previousElementSibling)">+ Add Choice</button>
+            `;
+            
+            const choicesContainer = qDiv.querySelector('[data-choices-container-for-q]');
+            if (question && question.choices) {
+                question.choices.forEach(c => addChoice(choicesContainer, c));
+            } else {
+                addChoice(choicesContainer);
+                addChoice(choicesContainer);
+            }
+
+            elements.questionsContainer.appendChild(qDiv);
+        }
+
+        function addChoice(container, choice = null) {
+            const cId = choice ? choice.id : '';
+            const cDiv = document.createElement('div');
+            cDiv.className = 'flex space-x-2 items-center';
+            cDiv.dataset.choiceId = cId;
+            
+            cDiv.innerHTML = `
+                <input type="hidden" name="choice-id" value="${cId}">
+                <input type="text" name="choice-text" value="${choice ? choice.text : ''}" placeholder="Choice Text" required class="flex-1 p-1 border rounded-lg text-sm">
+                <button type="button" class="text-red-400 hover:text-red-600" onclick="this.closest('.flex').remove()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            `;
+            container.appendChild(cDiv);
+        }
+
+        async function handleEditPoll(pollId) {
+            const { ok, data } = await apiFetch(`polls/${pollId}/`);
+            if (ok) {
+                openPollModal(data);
+            }
+        }
+        
+        async function handleDeletePoll(pollId) {
+            if (!confirm(`Are you sure you want to delete Poll ID ${pollId}? This action cannot be undone.`)) return;
+
+            const { ok } = await apiFetch(`polls/${pollId}/`, 'DELETE');
+            if (ok) {
+                updateState({ message: `Poll ID ${pollId} deleted successfully.` });
+                fetchPolls();
+            }
+        }
+
+        function serializePollForm() {
+            const isEdit = !!document.getElementById('poll-id-field').value;
+            const questions = [];
+            
+            // Collect questions and choices
+            elements.questionsContainer.querySelectorAll('.border.p-4').forEach(qDiv => {
+                const question = {
+                    text: qDiv.querySelector('input[name^="question-text-"]').value,
+                    choices: []
+                };
+
+                const qId = qDiv.dataset.questionId;
+                if (qId) { question.id = parseInt(qId); }
+
+                qDiv.querySelectorAll('[data-choices-container-for-q] > .flex').forEach(cDiv => {
+                    const choice = {
+                        text: cDiv.querySelector('input[name="choice-text"]').value
+                    };
+                    const cId = cDiv.dataset.choiceId;
+                    if (cId) { choice.id = parseInt(cId); }
+                    question.choices.push(choice);
+                });
+
+                questions.push(question);
             });
-            if (response.ok) {
-                alert('Poll created!');
+
+            // Handle UTC conversion for end date
+            const localDateStr = document.getElementById('poll-end-date').value;
+            const endDate = localDateStr ? new Date(localDateStr).toISOString() : null;
+
+            const payload = {
+                title: document.getElementById('poll-title').value,
+                description: document.getElementById('poll-description').value,
+                is_active: document.getElementById('poll-is-active').checked,
+                end_date: endDate,
+                questions: questions
+            };
+            
+            // If editing and the poll has votes, we might need the reset_votes flag
+            if (isEdit && state.activePoll && state.activePoll.votes > 0) {
+                 if (confirm('WARNING: This poll has existing votes. Updating questions/choices will DELETE ALL VOTES. Do you want to proceed and reset votes?')) {
+                    payload.reset_votes = true;
+                } else {
+                    return null; // Cancel submission
+                }
+            }
+
+            return payload;
+        }
+
+        async function handleSubmitPoll(e) {
+            e.preventDefault();
+            const pollId = document.getElementById('poll-id-field').value;
+            const payload = serializePollForm();
+            
+            if (payload === null) return; // Submission cancelled due to vote reset warning
+
+            const method = pollId ? 'PUT' : 'POST';
+            const endpoint = pollId ? `polls/${pollId}/` : 'polls/';
+
+            const { ok, data } = await apiFetch(endpoint, method, payload);
+
+            if (ok) {
+                updateState({ message: `Poll ${pollId ? 'updated' : 'created'} successfully!` });
+                closeModal();
                 fetchPolls();
             } else {
-                alert('Failed to create poll');
+                // Error already displayed by apiFetch
             }
         }
 
-        async function vote(pollId, choiceId) {
-            const response = await fetch(`http://localhost:8000/api/v1/polls/${pollId}/vote/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ choice_id: choiceId })
-            });
-            if (response.status === 202 || response.status === 201) {
-                alert('Vote processing started!');
-                setTimeout(fetchPolls, 2000);
-            } else {
-                const data = await response.json();
-                alert('Vote failed: ' + data.error);
+        // --- Voting and Stats Logic ---
+        
+        async function handleViewVote(pollId) {
+            const { ok, data } = await apiFetch(`polls/${pollId}/`);
+            if (ok) {
+                updateState({ activePoll: data, currentView: 'vote' });
             }
         }
+        
+        async function handleViewStats(pollId) {
+            // Refetch details for stats view
+            const { ok, data } = await apiFetch(`polls/${pollId}/`);
+            if (ok) {
+                updateState({ activePoll: data, currentView: 'stats' });
+            }
+        }
+
+        function renderVoteDetails(poll) {
+            const container = document.getElementById('vote-questions-container');
+            if (!container) return;
+            
+            container.innerHTML = poll.questions.map(q => `
+                <div class="border-b pb-4 mb-4">
+                    <p class="font-bold text-lg mb-2 text-indigo-700">${q.text}</p>
+                    <div class="space-y-2" data-question-id="${q.id}">
+                        ${q.choices.map(c => `
+                            <label class="flex items-center space-x-3 bg-white p-3 rounded-lg shadow-sm cursor-pointer hover:bg-indigo-100 transition duration-100">
+                                <input type="radio" name="question_${q.id}" value="${c.id}" class="form-radio text-indigo-600 h-5 w-5">
+                                <span class="text-gray-700">${c.text}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('cast-vote-button').addEventListener('click', handleCastVote);
+        }
+        
+        async function handleCastVote() {
+            const questionsContainer = document.getElementById('vote-questions-container');
+            const voteRequests = [];
+            let allVoted = true;
+
+            questionsContainer.querySelectorAll('[data-question-id]').forEach(qDiv => {
+                const selectedChoice = qDiv.querySelector(`input[name^="question_"]:checked`);
+                if (selectedChoice) {
+                    voteRequests.push({ choice_id: parseInt(selectedChoice.value) });
+                } else {
+                    allVoted = false;
+                }
+            });
+
+            if (!allVoted) {
+                updateState({ error: 'Please select one choice for every question before casting your vote.' });
+                return;
+            }
+
+            let successCount = 0;
+            for (const vote of voteRequests) {
+                const { ok } = await apiFetch(`polls/${state.activePoll.id}/vote/`, 'POST', vote);
+                if (ok) {
+                    successCount++;
+                }
+            }
+
+            if (successCount === voteRequests.length) {
+                updateState({ message: `Successfully cast ${successCount} vote(s)!` });
+                // Automatically switch to stats after voting
+                handleViewStats(state.activePoll.id);
+            }
+        }
+
+        async function fetchStatsData() {
+            if (!state.activePoll) return;
+            const { ok, data } = await apiFetch(`polls/${state.activePoll.id}/stats/`);
+            if (ok) {
+                renderStatsDetails(data);
+            }
+        }
+
+        function renderStatsDetails(statsData) {
+            const container = document.getElementById('stats-questions-container');
+            if (!container) return;
+
+            const statsHtml = statsData.questions.map(q => {
+                const totalVotes = q.choices.reduce((sum, c) => sum + c.votes_count, 0);
+
+                return `
+                    <div class="border-t pt-4">
+                        <p class="font-bold text-xl mb-3 text-gray-800">${q.text} <span class="text-sm font-normal text-indigo-500">(${totalVotes} total votes)</span></p>
+                        ${q.choices.map(c => {
+                            const percentage = totalVotes > 0 ? ((c.votes_count / totalVotes) * 100).toFixed(1) : 0;
+                            const barWidth = percentage > 0 ? percentage : 0;
+
+                            return `
+                                <div class="mb-4">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-md font-medium text-gray-700">${c.text}</span>
+                                        <span class="text-md font-medium text-gray-700">${c.votes_count} votes (${percentage}%)</span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-3">
+                                        <div class="bg-indigo-600 h-3 rounded-full" style="width: ${barWidth}%"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = statsHtml;
+            document.getElementById('refresh-stats-button').addEventListener('click', fetchStatsData);
+        }
+
+
+        // --- Initialization and Event Delegation ---
+
+        function attachEventListeners() {
+            // Auth forms
+            document.addEventListener('submit', (e) => {
+                if (e.target.id === 'login-form') handleLogin(e);
+                if (e.target.id === 'register-form') handleRegister(e);
+            });
+            
+            // Logout
+            elements.logoutButton.addEventListener('click', handleLogout);
+
+            // Poll Modal
+            elements.closeModalButton.addEventListener('click', closeModal);
+            elements.addQuestionButton.addEventListener('click', () => addQuestion());
+            elements.pollForm.addEventListener('submit', handleSubmitPoll);
+        }
+
+        function init() {
+            attachEventListeners();
+            
+            if (state.token) {
+                // If token exists, try to load polls immediately
+                fetchPolls();
+                updateState({ isAuthenticated: true, currentView: 'dashboard' });
+            } else {
+                updateState({ currentView: 'auth' });
+            }
+        }
+
+        window.onload = init;
     </script>
 </body>
 </html>

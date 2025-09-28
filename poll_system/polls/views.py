@@ -193,7 +193,7 @@ class PollViewSet(viewsets.ModelViewSet):
 
 
     @action(detail=True, methods=['get'], permission_classes=[IsAuthenticatedOrReadOnly])
-    @method_decorator(cache_page(60 * 5, key_prefix='poll_stats_pk_'))
+    @method_decorator(cache_page(60 * 1, key_prefix='poll_stats_pk_'))
     @swagger_auto_schema(
         responses={
             200: openapi.Response('Poll statistics', openapi.Schema(
